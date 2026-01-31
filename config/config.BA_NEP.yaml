@@ -1,0 +1,14 @@
+#===============Notizen==============
+# snakemake -n solve_elec_networks --cores 96 --configfile config/config.BA_NEP.yaml
+#===============Version==============
+version: v2025.07.0
+#===============Tutorial==============
+tutorial: false
+#===============Logging==============
+logging:
+  level: INFO
+  format: "%(levelname)s:%(name)s:%(message)s"
+#===============Run==============
+run:
+  prefix: 'BA_NEP_2045'
+  name: 'KN2045_Elek'
