@@ -1,3 +1,4 @@
+#===============Notizen==============
 # snakemake -n solve_elec_networks --cores 6 --configfile config/config.BA_NEP.yaml
 #===============Version==============
 version: v2025.07.0
@@ -9,12 +10,100 @@ logging:
   format: "%(levelname)s:%(name)s:%(message)s"
 #===============Run==============
 run:
-  prefix: 'Default_KN2045_Elek'
+  prefix: 'BA_NEP_2045'
   name: 'KN2045_Elek'
 #===============Szenario==============
 scenario:
   clusters:
   - 50 # > 20 Clusters!! #klienes Netz, weniger Regionen --> deutlich weniger Rechenaufwand 
+  opts:
+  - ""
+  sector_opts:
+  - "" #Nutzen, um nicht in sector-Simulation zu rutschen
+  planning_horizons:
+  - 2045
+#===============Snapshot (optinal)==============
+snapshots: # Aus welchen Zeitfenster werden Wetterdaten etc. genommen.
+  start: "2019-01-01"
+  end: "2020-01-01"
+  inclusive: 'left'
+#===============Electricity==============
+# docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#electricity
+electricity:
+  voltages: [220., 300., 330., 380., 400., 500., 750.]
+  base_network: osm-prebuilt #entsoegridkit
+  osm-prebuilt-version: 0.6
+  gaslimit_enable: false
+  gaslimit: false
+  co2limit_enable: false
+  co2limit: 7.75e+7
+  co2base: 1.487e+9
+
+  operational_reserve:
+    activate: false
+    epsilon_load: 0.02
+    epsilon_vres: 0.02
+    contingency: 4000
+
+  max_hours:
+    battery: 6
+    H2: 168
+
+  extendable_carriers:
+    Generator: [solar, solar-hsat, onwind, offwind-ac, offwind-dc, offwind-float, OCGT, CCGT]
+    StorageUnit: [] # battery, H2
+    Store: [battery, H2]
+    Link: [] # H2 pipeline
+
+  powerplants_filter: (DateOut >= 2024 or DateOut != DateOut) and not (Country == 'Germany' and Fueltype == 'Nuclear')
+  custom_powerplants: false
+  everywhere_powerplants: []
+
+  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, lignite, geothermal, biomass]
+  renewable_carriers: [solar, solar-hsat, onwind, offwind-ac, offwind-dc, offwind-float, hydro]
+
+  estimate_renewable_capacities:
+    enable: true
+    from_gem: true
+    year: 2020
+    expansion_limit: false
+    technology_mapping:
+      Offshore: offwind-ac
+      Onshore: onwind
+      PV: solar
+
+  autarky:
+    enable: false
+    by_country: false
+
+  transmission_limit: vopt
+#===============Costs==============
+costs:
+  year: 2045
+  social_discountrate: 0.02
+  fill_values:
+    FOM: 0
+    VOM: 0
+    efficiency: 1
+    fuel: 0
+    investment: 0
+    lifetime: 25
+    CO2 intensity: 0
+    discount rate: 0.07
+    standing losses: 0
+  custom_cost_fn: data/custom_costs.csv
+  overwrites: {}
+  capital_cost: {}
+  marginal_cost: {}
+  emission_prices:
+    enable: false
+    co2: 0.0
+    co2_monthly_prices: false
+#===============Clustering==============
+clustering:
+  temporal:
+    resolution_elec: 1h # Warning: This option should currently only be used with electricity-only networks, not for sector-coupled networks.
+    resolution_sector: false
 #===============Solver==============
 solving:
   options:
@@ -25,7 +114,7 @@ solving:
     skip_iterations: true
     rolling_horizon: false
     seed: 123
-    custom_extra_functionality: ../data/custom_extra_functionality.py
+    custom_extra_functionality: ../data/custom_extra_functionality.py # Extrem wichtig! In der Default wird auf andere Datei verwiesen. Snake fliegt dor!! Bisher immer nur mit einem Jahr! Testen mit zwei Jahren als horizont!
     io_api:
     track_iterations: false
     min_iterations: 2
