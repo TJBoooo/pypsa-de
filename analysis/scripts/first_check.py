@@ -1,10 +1,114 @@
 import pypsa
 from pathlib import Path
-# ========= Was ist das? ========
 
-print('Hello')
+# ========= Netzwerkpfad =========
+pfad = Path(
+    r"C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\BA_NEP_2045\KN2045_Elek\networks\base_s_50_elec_.nc"
+)
 
-# ========= Einlesen Netzwerk =========
-pfad = r'C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\BA_NEP_2045_C50_1h\KN2045_Elek\networks\base_s_50_elec_.nc'
-n = pypsa.Network(pfad)
+def ask_for_network_path():
+    pfad = input("Bitte vollständigen Pfad zur .nc-Datei eingeben:\n> ").strip()
+    path = Path(pfad)
+    return path
 
+def create_output_dir(path):
+    path = Path(path)
+    path.mkdir(parents=True, exist_ok=True) # parents --> , exist_ok --> 
+    return path
+
+def main():
+    # ========= Abfrage Pfad =========
+    # pfad = ask_for_network_path()
+    # ========= Netzwerk Laden =========
+    print("Lade Netzwerk …")
+    n = pypsa.Network(pfad)
+    print("Netzwerk geladen:", n.meta['run']['prefix'])
+    print("Netzwerk geladen:", n.meta['run']['name'])
+    # ========= Zielordner erstellen =========
+    create_output_dir(pfad_out)
+    # ========= Allgemeiner erster Plot =========
+    # n.plot() ??
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+if __name__ == "__main__":
+    main()
