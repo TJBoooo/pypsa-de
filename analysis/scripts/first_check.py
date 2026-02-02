@@ -19,13 +19,16 @@ def create_output_dir(path):
 def main():
     # ========= Abfrage Pfad =========
     # pfad = ask_for_network_path()
+
+    # ========= Zielordner erstellen =========
+    # create_output_dir(pfad_out)
+
     # ========= Netzwerk Laden =========
     print("Lade Netzwerk …")
     n = pypsa.Network(pfad)
     print("Netzwerk geladen:", n.meta['run']['prefix'])
     print("Netzwerk geladen:", n.meta['run']['name'])
-    # ========= Zielordner erstellen =========
-    create_output_dir(pfad_out)
+    
     # ========= Allgemeiner erster Plot =========
     # n.plot() ??
 
