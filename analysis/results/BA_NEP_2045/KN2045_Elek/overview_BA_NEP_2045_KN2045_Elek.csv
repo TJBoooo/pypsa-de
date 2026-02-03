@@ -1,0 +1,12 @@
+,metric,value
+0,run_prefix,BA_NEP_2045
+1,run_name,KN2045_Elek
+2,network_file,C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\BA_NEP_2045\KN2045_Elek\networks\base_s_50_elec_.nc
+3,pypsa_version_loaded_from_file,v2025.07.0
+4,snapshots_count,8760
+5,Auflösung,1:00
+6,snapshots_start,2019-01-01 00:00:00
+7,snapshots_end,2019-12-31 23:00:00
+8,objective,54725832176.651215
+9,cluster,[50]
+10,planning_horizons,[2045]
