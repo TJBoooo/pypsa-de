@@ -1,44 +1,15 @@
-# ========= Pakete =========
+# =========================== Pakete ===========================
 import pypsa
 from pathlib import Path
 import pandas as pd
 import numpy as np
-# ========= Pakete für Plots =========
+# =========================== Pakete für Plots ===========================
 import matplotlib.pyplot as plt
 plt.style.use('bmh')
 import cartopy.crs as ccrs
 
-# ========= Netzwerkpfad =========
-def ask_for_network_path():
-    path_row = input("Bitte vollständigen Pfad zur .nc-Datei eingeben:\n> ").strip()
-    path = Path(path_row)
-    return path
-
-# Overview (Key–Value, super für Excel)
-def build_overview_df(n, prefix, name, pfad):
-    # objective ist nicht immer vorhanden/gesetzt -> safe
-    objective = getattr(n, "objective", None)
-
-    # time range
-    start = str(n.snapshots[0]) if len(n.snapshots) > 0 else None
-    end = str(n.snapshots[-1]) if len(n.snapshots) > 0 else None
-    auflösung = str(n.snapshots[1]-n.snapshots[0])[8:-3]
-
-    rows = [
-        {"metric": "run_prefix", "value": prefix},
-        {"metric": "run_name", "value": name},
-        {"metric": "network_file", "value": str(pfad)},
-        {"metric": "pypsa_version_loaded_from_file", "value": n.meta['version']},
-        {"metric": "snapshots_count", "value": len(n.snapshots)},
-        {"metric": "Auflösung", "value": auflösung},
-        {"metric": "snapshots_start", "value": start},
-        {"metric": "snapshots_end", "value": end},
-        {"metric": "objective", "value": objective},
-        {"metric": "cluster", "value": n.meta['scenario']['clusters']},
-        {"metric": "planning_horizons", "value": n.meta['scenario']['planning_horizons']},
-    ]
-    return pd.DataFrame(rows)  # Array in Dataframe überführen
-
+# =========================== Funktionen ===========================
+# ========= Erzeugen, der Netzwerkkomponenten =========
 def network_components(n): #, out_path):
     rows = []
     for name, component in n.components.items():  # n.components --> Diconary, items() --> Key-Value
@@ -52,16 +23,17 @@ def network_components(n): #, out_path):
 
 # ============================================== MAIN ==============================================
 def main():
-    # ========= Auswahl Ergebnisdatei =========
-    # pfad = ask_for_network_path() # Später wieder rein kommentieren!
-    pfad = Path(r"C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\BA_NEP_2045\KN2045_Elek\networks\base_s_50_elec_.nc")
-
+    # ========= Wo liegt das Netzwerk / die .nc-Datei? =========
+    # path_row = input("Bitte vollständigen Pfad zur .nc-Datei eingeben:\n> ").strip()
+    # path = Path(path_row)
+    path = Path(r"C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\BA_NEP_2045\KN2045_Elek\networks\base_s_50_elec_.nc") # Auskommentieren, wenn fertig
+    
     # ========= Netzwerk Laden =========
     print("\nLade Netzwerk …\n")
-    n = pypsa.Network(pfad)
+    n = pypsa.Network(path)
     prefix = n.meta['run']['prefix']
     name = n.meta['run']['name']
-    print("\nTitel:", prefix, name,'\n')
+    print(f'\nTitel: {prefix} {name} \n')
 
     # ========= Zielordner erstellen & Pfad zwischenspeichern=========
     base = Path(r"C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\analysis/results")
@@ -69,24 +41,39 @@ def main():
     path.mkdir(parents=True, exist_ok=True) # parents --> fehlende Ordner automatisch anlegen, exist_ok --> Kein Fehler, wenn Order schon da
     print('Results:', path, '\n')
 
-    # ========= Owerview Netzwerk erzeugen & ablegen =========
-    overview = build_overview_df(n, prefix, name, pfad)
-    # print(overview)
+    # ========= Netzwerkdaten erzeugen & ablegen =========
+    objective = getattr(n, "objective", None)
+    start = str(n.snapshots[0]) if len(n.snapshots) > 0 else None
+    end = str(n.snapshots[-1]) if len(n.snapshots) > 0 else None
+    auflösung = str(n.snapshots[1]-n.snapshots[0])[8:-3]
+    rows = [
+            {"metric": "run_prefix", "value": prefix},
+            {"metric": "run_name", "value": name},
+            {"metric": "network_file", "value": str(path)},
+            {"metric": "pypsa_version_loaded_from_file", "value": n.meta['version']},
+            {"metric": "snapshots_count", "value": len(n.snapshots)},
+            {"metric": "Auflösung", "value": auflösung},
+            {"metric": "snapshots_start", "value": start},
+            {"metric": "snapshots_end", "value": end},
+            {"metric": "objective", "value": objective},
+            {"metric": "cluster", "value": n.meta['scenario']['clusters']},
+            {"metric": "planning_horizons", "value": n.meta['scenario']['planning_horizons']},
+        ]
+
+    overview = pd.DataFrame(rows)  # Array in Dataframe überführen
     overview.to_csv(path / f'overview_{prefix}_{name}.csv')
-    # print('Owerview wurde abgespeichert.\n')
 
     # ========= Allgemeiner erster Plot =========
-    plot_path = path / f"map_{prefix}_{name}.png"
-    map, ax = plt.subplots(subplot_kw={"projection": ccrs.PlateCarree()}, figsize=(10, 8))
-    map.suptitle(
-    f"Europa | {prefix} | {name}",
-    fontsize=12,
-    fontweight="bold"
-    )
+    title = 'Karte_Europa'
+    breite = 10
+    höhe = 8
+    plot_path = path / f"{title}_{prefix}_{name}.png"
+
+    fig, ax = plt.subplots(subplot_kw={"projection": ccrs.PlateCarree()}, figsize=(breite, höhe))
+    fig.suptitle(f"{title} | {prefix} | {name}", fontsize=12, fontweight="bold")
     n.plot(ax=ax)
-    map.savefig(plot_path, dpi=300, bbox_inches="tight")
-    plt.close(map)
-    # print('Karte wurde in Ordner abgelegt.')
+    fig.savefig(plot_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
     
     # ========= Netzwerkcomponenten =========
     components = network_components(n)
@@ -99,58 +86,112 @@ def main():
                       )
     energy_balance.to_csv(path / f'Energiebilanz_{prefix}_{name}.csv', index=False)
 
-    # ========= Generators =========
-    # create folder
-    path_gen = path / 'generators'
+    # =========================== Generators ===========================
+    # Ordner erstellen
+    path_gen = path / 'Generatoren'
     path_gen.mkdir(parents=True, exist_ok=True)
-     # list of all gen
-    n.generators.to_csv(path_gen / f'origin_list-gen_{prefix}_{name}.csv', index = True)
-    # list of opt gen
-    mod_gen = n.generators.query("p_nom_mod > 0")
-    mod_gen.to_csv(path_gen / f'mod_gen_{prefix}_{name}.csv', index = True)
+    # ===================
+    title = 'Verwendete_Generatoren'
+    n.generators.to_csv(path_gen / f'{title}_{prefix}_{name}.csv', index = True)
+    # ===================
+    title = 'Optimierte_Generatore'
+    untergrenze_opt = 0.5
+    opt_gen = n.generators.p_nom_opt - n.generators.p_nom
+    opt_gen_pos = (opt_gen[opt_gen> untergrenze_opt])
+    opt_gen_pos.reset_index(name='p_nom_mod').to_csv(path_gen / f'{title}_{prefix}_{name}.csv', index = True) 
+    # ===================
+    title = 'Anzahl_Generator_pro_Carrier'
+    (n.generators.carrier.value_counts().reset_index(name="n_generators")
+     ).to_csv(path_gen / f'{title}_{prefix}_{name}.csv', index=False)
+    # ===================
+    title = 'Wirkleistungkurve_der_Generatoren_01_01_2019'
+    # Wirkleistung, die in Netz abgegeben wird
+    n.generators_t.p.loc['01-01-2019'].to_csv(path_gen / f'{title}_{prefix}_{name}.csv', index=True)
 
-    # ========= Carriers =========
-    # create folder
-    path_carrries = path / 'carriers'
-    path_carrries.mkdir(parents=True, exist_ok=True)
-    # used carrier
-    carrier_table = (
-        n.generators
-        .groupby("carrier")
-        .size()
-        .reset_index(name="n_generators")
-        .sort_values("n_generators", ascending=False)
+        # ===================
+    title = 'Generatorkapazitäten_pro_Technologie'
+    # Zeitintervall unabhängig
+    untergrenze_opt = 0.5  # MW
+
+    gens = n.generators.copy()
+    gens["expansion_mw"] = gens["p_nom_opt"] - gens["p_nom"]          # Zwischenrechnung
+    gens["expansion_pos_mw"] = gens["expansion_mw"].where(gens["expansion_mw"] > untergrenze_opt, 0.0)
+
+    liste_technologien = (
+    gens.groupby("carrier")
+    .agg(
+        n_generators=("carrier", "size"),
+        p_nom_mw=("p_nom", "sum"),
+        p_nom_opt_mw=("p_nom_opt", "sum"),
+        expansion_mw=("expansion_mw", "sum"),           # Summe der Differenzen
+        expansion_pos_mw=("expansion_pos_mw", "sum"),   # Summe nur über Schwelle
     )
-    carrier_table.to_csv(path_carrries / f'used_carrier_{prefix}_{name}.csv', index=False)
-    # cost per carrier
-    carrier_cost = (
-        n.generators.groupby("carrier")
-        .marginal_cost
-        .mean() # arithmetisches Mittel
-        .reset_index()
-        .rename(columns={'marginal_cost': 'marginal_cost [€ / MWh]'})
+    .reset_index()
+    .sort_values("p_nom_mw", ascending=False)
         )
-    carrier_cost.to_csv(path_carrries / f"marginal_cost_by_carrier_{prefix}_{name}.csv", index=False)
-    # list of opt carriers
-    expansion_by_carrier = (
-        mod_gen # Up at gen
-        .groupby("carrier")["p_nom_mod"] 
-        .sum()
-        .reset_index()
-        .rename(columns={"p_nom_mod": "p_nom_mod [MW]"})
-        )
-    expansion_by_carrier.to_csv(path_carrries / f'mod_carriers_{prefix}_{name}.csv', index = False)
-    # carr snapshot
-    gen_by_carrier = (
-        n.generators_t.p # original df
-        .T # transponieren
-        .groupby(n.generators.carrier) # sortieren nach carrier
-        .sum() # generatorleistung je carrier aufsummieren
-        .T # zurück transponieren
-        )
-    gen_by_carrier.to_csv(path_carrries / f"carr_snap_{prefix}_{name}_by_carrier.csv",index=True)
-    # generatoren sortiert nach carrier weiter Zusammenfassen
-    carrier_map = pd.Series({ # Serie mit Zuordnung der Übergeordneten Carrier
+
+    liste_technologien.to_csv(path_gen / f"{title}_{prefix}_{name}.csv",index=False)
+
+    df = liste_technologien.set_index("carrier")#.sort_values("p_nom_opt_mw", ascending=False)
+
+    fig, axes = plt.subplots(
+        nrows=3,
+        ncols=1,
+        figsize=(12, 10),
+        sharex=True
+    )
+
+    #  1 Installierte Kapazität
+    df["p_nom_mw"].plot.bar(ax=axes[0])
+    axes[0].set_ylabel("MW")
+    axes[0].set_title("Installierte Kapazität [p_nom]")
+    # 2 Optimierte Kapazität
+    df["p_nom_opt_mw"].plot.bar(ax=axes[1])
+    axes[1].set_ylabel("MW")
+    axes[1].set_title("Optimierte Kapazität [p_nom_opt]")
+
+    # 3 Ausgebaute Kapazität (nur > Schwelle)
+    df["expansion_mw"].plot.bar(ax=axes[2])
+    axes[2].set_ylabel("MW")
+    axes[2].set_title("Ausgebaute Kapazität [p_nom_mod]")
+    # Gemeinsamer Titel
+    fig.suptitle(
+        f"{title} | {prefix} | {name}",
+        fontsize=12,
+        fontweight="bold"
+    )
+    # Feinschliff
+    axes[2].set_xlabel("Technologie")
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    # Speichern
+    fig.savefig(
+        path_gen / f"{title}t_{prefix}_{name}.png",
+        dpi=300,
+        bbox_inches="tight"
+    )
+    plt.close(fig)
+    # =========================== Technologien / Energien ===========================
+    # Ordner erstellen
+    path_carries = path / 'Technologien_Energien'
+    path_carries.mkdir(parents=True, exist_ok=True)
+    # ===================
+    title = 'Optimierte_Technologien'
+    opt_energy_pos = opt_gen_pos.groupby(n.generators.carrier).sum()
+    opt_energy_pos.reset_index(name='p_nom_mod').to_csv(path_carries / f'{title}_{prefix}_{name}.csv', index = False)
+    # ===================
+    title = 'Marginale_Kosten'
+    # marginale Kosten = varianle Kosten, um eine zusaätzliche MWh zu erzeugen
+    (n.generators.groupby("carrier").marginal_cost.mean() # arithmetisches Mittel
+        .reset_index().rename(columns={'marginal_cost': 'marginal_cost [€ / MWh]'})).to_csv(path_carries / f'{title}_{prefix}_{name}.csv', index=False)
+    # ===================
+    title = 'Wirkleistungskurven_der_Technologien'
+    # Wirkleistung, die in Netz abgegeben wird
+    p_per_tech = (n.generators_t.p.T.groupby(n.generators.carrier).sum().T)
+    p_per_tech.to_csv(path_carries / f"{title}_{prefix}_{name}.csv", index=True)
+    # ===================
+    title = "(EU)_Generatorleistung_zu_Energiearten_zusammengefast_pro_Jahr"
+    # Technologien nach Energien zusammenfassen
+    carrier_map = pd.Series({ # Serie mit Energiearten
         "CCGT": "Gas",
         "OCGT": "Gas",
         "biomass": "renewable",
@@ -166,90 +207,81 @@ def main():
         "solar": "renewable",
         "solar-hsat": "renewable"
     })
-    # Tabelle zum plotten vorbereiten
-    carr_snap = (gen_by_carrier.T.groupby(carrier_map).sum().T) # Technologien den übergeodneten Begriffen zuordnen
-    carrier_energy = carr_snap.sum(axis=0) # Spalten aufsummieren
-    carrier_order = carrier_energy.sort_values(ascending=False).index # Indexe nach Summe sortieren
-    carr_snap_sorted = ((carr_snap[carrier_order]).resample('ME').mean()) # Dataframe neu anordnen
+    p_per_energytyp = (p_per_tech.T.groupby(carrier_map).sum().T) # Technologien den Energiearten zuordnen
+    sec_prio = p_per_energytyp.sum(axis=0) # Spalten aufsummieren 0 -- Spalten
+    first_prio = sec_prio.sort_values(ascending=False).index # Indexe nach Summe sortieren
+    p_per_energytyp_sorted = (
+        (p_per_energytyp[first_prio]) # Index neu sortieren
+        .resample('W') # df.resample("<FREQUENZ>").<Aggregation>() 
+        # -- ME - Monatsende
+        # -- W - wöchentlich
+        # -- D - täglich
+        # -- h - stündlich
+        # -- für andere auflösungen Chati fragen
+        .mean()) # arithmetischer Mittelwert
+    p_per_energytyp_sorted.to_csv(path_carries / f'{title}_{prefix}_{name}.csv')
     # Diagrammeinstellungen
-    höhe = 8
-    breite = höhe * (20/8)
-    ax = carr_snap_sorted.plot.area(
-        figsize=(breite, höhe),
-        title="Generatoren nach Technologien zusammengefasst"
-    )
-    ax.set_xlabel('Monate') # Diagrammbeschriftung
+    ax = p_per_energytyp_sorted.plot.area(figsize=(20, 8), title=title)
+    ax.set_xlabel('t') # Diagrammbeschriftung
     ax.set_ylabel("Power [p | MW]") # Diagrammbeschriftung
     # Ploteinstellungen
-    ax.figure.suptitle(
-        f"Technologien Europa | {prefix} | {name}",
-        fontsize=12,
-        fontweight="bold"
-    )
-    plot_path = path_carrries / f'carriers_year_{prefix}_{name}' # Pfad zum speichern
+    ax.figure.suptitle(f"Auflösung: Wöchentlich", fontsize=12, fontweight="bold")
+    plot_path = path_carries / f'{title}_{prefix}_{name}' # Pfad zum speichern
     ax.figure.savefig(plot_path, dpi=300, bbox_inches="tight") # Plot speichern
     plt.close(ax.figure)
 
+    # ===================
+    title = 'Gesamterzeugung_pro_Jahr_und_Technologie'
+    energie_pro_technologie = p_per_tech.sum().sort_values(ascending=False)  # Summe über Zeit & nach Größe sortiert
+    energie_pro_technologie.to_csv(path_carries / f"{title}_{prefix}_{name}.csv",index=True)
+    # Diagrammeinstellungen & Speichern
+    ax = energie_pro_technologie.plot.bar(figsize=(10,4))
+    ax.set_ylabel("Leistungssumme pro Jahr [MWh]")
+    ax.set_title(title)
+    # ax.figure.suptitle(f"Subtitle", fontsize=12, fontweight="bold")
+    ax.figure.savefig(path_carries / f'{title}_{prefix}_{name}', dpi=300, bbox_inches="tight") # Plot speichern
+    plt.close(ax.figure)
 
-# ============================================== Hier geht es weiter!! Die Diagramme müssen gespecihert werden!! ==============================================
+    # ===================
+    title = 'Gesamterzeugung_pro_Jahr_und_Energieart'
+    energie_pro_energytyp = p_per_energytyp.sum().sort_values(ascending=False)  # Summe über Zeit & nach Größe sortiert
+    energie_pro_energytyp.to_csv(path_carries / f"{title}_{prefix}_{name}.csv",index=True)
+    # Diagrammeinstellungen & Speichern
+    ax = energie_pro_energytyp.plot.bar(figsize=(10,4))
+    ax.set_ylabel("Leistungssumme pro Jahr [MWh]")
+    ax.set_title(title)
+    # ax.figure.suptitle(f"Subtitle", fontsize=12, fontweight="bold")
+    ax.figure.savefig(path_carries / f'{title}_{prefix}_{name}', dpi=300, bbox_inches="tight") # Plot speichern
+    plt.close(ax.figure)
 
 
-    # Genratorkapazität nach Technologie (Balkendiagramm)
-    gen_carriers = (
-        n.generators
-        .groupby("carrier")
-        .agg(
-            n_generators=("carrier", "size"),
-            p_nom_mw=("p_nom", "sum"),
-            p_nom_opt_mw=("p_nom_opt", "sum") if "p_nom_opt" in n.generators.columns else ("p_nom", "sum"),
-            p_nom_mod_mw=("p_nom_mod", "sum") if "p_nom_mod" in n.generators.columns else ("p_nom", "sum"),
-        )
-        .reset_index()
-    )
-    gen_carriers = gen_carriers.sort_values("p_nom_mw", ascending=False)
-    ax = gen_carriers.set_index("carrier")["p_nom_mw"].plot.bar(figsize=(10,4))
-    ax.set_ylabel("Installed capacity [MW]")
-    ax.set_title("Generator capacity by carrier")
-
-    # Speichern!!
-
-    # Gesamterzeugung der Technologien
-    gen_by_carrier = (
-        n.generators_t.p
-        .T.groupby(n.generators.carrier)
-        .sum()
-        .T
-    )
-    energy_by_carrier = gen_by_carrier.sum().sort_values(ascending=False)  # Summe über Zeit
-    ax = energy_by_carrier.plot.bar(figsize=(10,4))
-    ax.set_ylabel("Total generation (sum over snapshots) [MW·h-equivalent]")
-    ax.set_title("Total generation by carrier")
-
-    # Speichern
-
+# Kann der Ordner Technologien in Generatoren sinnvoll mit eingepflegt werden?
+# ============================================== Rest ncoh anschauen!! ==============================================   
+    # ===================
     # Energiebilanz nach Technologie
+    title = "Energy balance (Generators, AC) by carrier"
     eb = n.statistics.energy_balance().reset_index(name="energy_mwh")
-
-    # nur Strom-Ebene
-    eb_ac_gen = eb.query("component == 'Generator' and bus_carrier == 'AC'")
-
-    # nach carrier aggregieren und sortieren
-    eb_ac_carrier = (
+    eb_ac_gen = eb.query("component == 'Generator' and bus_carrier == 'AC'") # nur Strom-Ebene
+    eb_ac_carrier = ( # nach carrier aggregieren und sortieren
         eb_ac_gen.groupby("carrier")["energy_mwh"]
         .sum()
         .sort_values(ascending=False)
     )
-
     ax = eb_ac_carrier.plot.bar(figsize=(10,4))
     ax.set_ylabel("Energy balance [MWh]")
-    ax.set_title("Energy balance (Generators, AC) by carrier")
+    ax.set_title(title)
 
-    # Speichern
+    eb_ac_carrier.to_csv(path_carries / f"{title}_{prefix}_{name}.csv",index=True)
 
+    plot_path = path_carries / f'{title}_{prefix}_{name}'
+    ax.figure.savefig(plot_path, dpi=300, bbox_inches="tight") # Plot speichern
+    plt.close(ax.figure)
+
+    # ===================
     # Top 8 Technologien & andere
     top_n = 8
     s = eb_ac_carrier
-
+    title = f"Top {top_n} carriers + Other (AC generators)"
     top = s.head(top_n)
     rest = pd.Series({"Other": s.iloc[top_n:].sum()})
 
@@ -257,9 +289,11 @@ def main():
 
     ax = plot_series.plot.bar(figsize=(10,4))
     ax.set_ylabel("Energy [MWh]")
-    ax.set_title(f"Top {top_n} carriers + Other (AC generators)")
+    ax.set_title(title)
 
-    # Speichern
+    plot_path = path_carries / f'{title}_{prefix}_{name}'
+    ax.figure.savefig(plot_path, dpi=300, bbox_inches="tight") # Plot speichern
+    plt.close(ax.figure)
 
 
 # ============================================== Schauen wir ==============================================

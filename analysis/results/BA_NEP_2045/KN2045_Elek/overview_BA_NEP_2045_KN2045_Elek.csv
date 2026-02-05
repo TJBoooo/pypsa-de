@@ -1,7 +1,7 @@
 ,metric,value
 0,run_prefix,BA_NEP_2045
 1,run_name,KN2045_Elek
-2,network_file,C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\BA_NEP_2045\KN2045_Elek\networks\base_s_50_elec_.nc
+2,network_file,C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\analysis\results\BA_NEP_2045\KN2045_Elek
 3,pypsa_version_loaded_from_file,v2025.07.0
 4,snapshots_count,8760
 5,Auflösung,1:00
