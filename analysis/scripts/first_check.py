@@ -14,17 +14,6 @@ def ask_for_network_path():
     path = Path(path_row)
     return path
 
-# def create_output_folder(base, präfix, name):
-#     path = base / präfix / name
-#     path.mkdir(parents=True, exist_ok=True) # parents --> fehlende Ordner automatisch anlegen, exist_ok --> Kein Fehler, wenn Order schon da
-#     print('Results:', path, '\n')
-#     return path # Funktion überschreibt Ordner nicht -- Gibt Pfad zu Ordner zurück.
-
-def get_output_path(folder, filename, suffix):
-    if not suffix.startswith("."):
-        suffix = "." + suffix
-    return folder / f"{filename}{suffix}"
-
 # Overview (Key–Value, super für Excel)
 def build_overview_df(n, prefix, name, pfad):
     # objective ist nicht immer vorhanden/gesetzt -> safe
@@ -88,21 +77,27 @@ def main():
 
     # ========= Allgemeiner erster Plot =========
     plot_path = path / f"map_{prefix}_{name}.png"
-    fig, ax = plt.subplots(subplot_kw={"projection": ccrs.PlateCarree()}, figsize=(10, 8))
-    fig.suptitle(
-    f"PyPSA-DE – {prefix} | {name}",
+    map, ax = plt.subplots(subplot_kw={"projection": ccrs.PlateCarree()}, figsize=(10, 8))
+    map.suptitle(
+    f"Europa | {prefix} | {name}",
     fontsize=12,
     fontweight="bold"
     )
     n.plot(ax=ax)
-    fig.savefig(plot_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
+    map.savefig(plot_path, dpi=300, bbox_inches="tight")
+    plt.close(map)
     # print('Karte wurde in Ordner abgelegt.')
     
     # ========= Netzwerkcomponenten =========
     components = network_components(n)
     # print("\nAnzahl der Komponenten:\n", components)
     components.to_csv(path / f'components_{prefix}_{name}.csv', index = False)
+
+    # ========= Energiebilanz =========
+    energy_balance = (n.statistics.energy_balance()
+                      .reset_index(name = 'energiy_MWh')
+                      )
+    energy_balance.to_csv(path / f'Energiebilanz_{prefix}_{name}.csv', index=False)
 
     # ========= Generators =========
     # create folder
@@ -118,7 +113,7 @@ def main():
     # create folder
     path_carrries = path / 'carriers'
     path_carrries.mkdir(parents=True, exist_ok=True)
-        # used carrier
+    # used carrier
     carrier_table = (
         n.generators
         .groupby("carrier")
@@ -127,24 +122,24 @@ def main():
         .sort_values("n_generators", ascending=False)
     )
     carrier_table.to_csv(path_carrries / f'used_carrier_{prefix}_{name}.csv', index=False)
-    # cost per carriere (arithetisches Mittel --> mean())
+    # cost per carrier
     carrier_cost = (
         n.generators.groupby("carrier")
-        .marginal_cost.mean()
+        .marginal_cost
+        .mean() # arithmetisches Mittel
         .reset_index()
-        .rename(columns={'marginal_cost': 'marginal_cost [€ / MWh]'}))
-    
+        .rename(columns={'marginal_cost': 'marginal_cost [€ / MWh]'})
+        )
     carrier_cost.to_csv(path_carrries / f"marginal_cost_by_carrier_{prefix}_{name}.csv", index=False)
-    # expanion by carrier
-    expansion_by_carrier = (mod_gen.groupby("carrier")["p_nom_mod"].sum().reset_index().rename(columns={"p_nom_mod": "p_nom_mod [MW]"})
-                            # .sort_values("capacity_added_mw", ascending=False)
-                            )
+    # list of opt carriers
+    expansion_by_carrier = (
+        mod_gen # Up at gen
+        .groupby("carrier")["p_nom_mod"] 
+        .sum()
+        .reset_index()
+        .rename(columns={"p_nom_mod": "p_nom_mod [MW]"})
+        )
     expansion_by_carrier.to_csv(path_carrries / f'mod_carriers_{prefix}_{name}.csv', index = False)
-
-
-    energy_balance = n.statistics.energy_balance().reset_index().rename(columns={'0': 'MWh'})
-    energy_balance.to_csv(path / f'Energiebilanz_{prefix}_{name}.csv', index=False)
-
     # carr snapshot
     gen_by_carrier = (
         n.generators_t.p # original df
@@ -154,6 +149,119 @@ def main():
         .T # zurück transponieren
         )
     gen_by_carrier.to_csv(path_carrries / f"carr_snap_{prefix}_{name}_by_carrier.csv",index=True)
+    # generatoren sortiert nach carrier weiter Zusammenfassen
+    carrier_map = pd.Series({ # Serie mit Zuordnung der Übergeordneten Carrier
+        "CCGT": "Gas",
+        "OCGT": "Gas",
+        "biomass": "renewable",
+        "coal": "fossil",
+        "lignite": "fossil", # Braunkohle
+        "nuclear": "nuclear",
+        "offwind-ac": "renewable",
+        "offwind-dc": "renewable",
+        "offwind-float": "renewable",
+        "oil": "fossil",
+        "onwind": "renewable",
+        "ror": "water-power",
+        "solar": "renewable",
+        "solar-hsat": "renewable"
+    })
+    # Tabelle zum plotten vorbereiten
+    carr_snap = (gen_by_carrier.T.groupby(carrier_map).sum().T) # Technologien den übergeodneten Begriffen zuordnen
+    carrier_energy = carr_snap.sum(axis=0) # Spalten aufsummieren
+    carrier_order = carrier_energy.sort_values(ascending=False).index # Indexe nach Summe sortieren
+    carr_snap_sorted = ((carr_snap[carrier_order]).resample('ME').mean()) # Dataframe neu anordnen
+    # Diagrammeinstellungen
+    höhe = 8
+    breite = höhe * (20/8)
+    ax = carr_snap_sorted.plot.area(
+        figsize=(breite, höhe),
+        title="Generatoren nach Technologien zusammengefasst"
+    )
+    ax.set_xlabel('Monate') # Diagrammbeschriftung
+    ax.set_ylabel("Power [p | MW]") # Diagrammbeschriftung
+    # Ploteinstellungen
+    ax.figure.suptitle(
+        f"Technologien Europa | {prefix} | {name}",
+        fontsize=12,
+        fontweight="bold"
+    )
+    plot_path = path_carrries / f'carriers_year_{prefix}_{name}' # Pfad zum speichern
+    ax.figure.savefig(plot_path, dpi=300, bbox_inches="tight") # Plot speichern
+    plt.close(ax.figure)
+
+
+# ============================================== Hier geht es weiter!! Die Diagramme müssen gespecihert werden!! ==============================================
+
+
+    # Genratorkapazität nach Technologie (Balkendiagramm)
+    gen_carriers = (
+        n.generators
+        .groupby("carrier")
+        .agg(
+            n_generators=("carrier", "size"),
+            p_nom_mw=("p_nom", "sum"),
+            p_nom_opt_mw=("p_nom_opt", "sum") if "p_nom_opt" in n.generators.columns else ("p_nom", "sum"),
+            p_nom_mod_mw=("p_nom_mod", "sum") if "p_nom_mod" in n.generators.columns else ("p_nom", "sum"),
+        )
+        .reset_index()
+    )
+    gen_carriers = gen_carriers.sort_values("p_nom_mw", ascending=False)
+    ax = gen_carriers.set_index("carrier")["p_nom_mw"].plot.bar(figsize=(10,4))
+    ax.set_ylabel("Installed capacity [MW]")
+    ax.set_title("Generator capacity by carrier")
+
+    # Speichern!!
+
+    # Gesamterzeugung der Technologien
+    gen_by_carrier = (
+        n.generators_t.p
+        .T.groupby(n.generators.carrier)
+        .sum()
+        .T
+    )
+    energy_by_carrier = gen_by_carrier.sum().sort_values(ascending=False)  # Summe über Zeit
+    ax = energy_by_carrier.plot.bar(figsize=(10,4))
+    ax.set_ylabel("Total generation (sum over snapshots) [MW·h-equivalent]")
+    ax.set_title("Total generation by carrier")
+
+    # Speichern
+
+    # Energiebilanz nach Technologie
+    eb = n.statistics.energy_balance().reset_index(name="energy_mwh")
+
+    # nur Strom-Ebene
+    eb_ac_gen = eb.query("component == 'Generator' and bus_carrier == 'AC'")
+
+    # nach carrier aggregieren und sortieren
+    eb_ac_carrier = (
+        eb_ac_gen.groupby("carrier")["energy_mwh"]
+        .sum()
+        .sort_values(ascending=False)
+    )
+
+    ax = eb_ac_carrier.plot.bar(figsize=(10,4))
+    ax.set_ylabel("Energy balance [MWh]")
+    ax.set_title("Energy balance (Generators, AC) by carrier")
+
+    # Speichern
+
+    # Top 8 Technologien & andere
+    top_n = 8
+    s = eb_ac_carrier
+
+    top = s.head(top_n)
+    rest = pd.Series({"Other": s.iloc[top_n:].sum()})
+
+    plot_series = pd.concat([top, rest])
+
+    ax = plot_series.plot.bar(figsize=(10,4))
+    ax.set_ylabel("Energy [MWh]")
+    ax.set_title(f"Top {top_n} carriers + Other (AC generators)")
+
+    # Speichern
+
+
 # ============================================== Schauen wir ==============================================
 
     

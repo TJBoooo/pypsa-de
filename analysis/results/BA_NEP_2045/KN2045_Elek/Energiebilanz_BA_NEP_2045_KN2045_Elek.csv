@@ -1,4 +1,4 @@
-component,carrier,bus_carrier,0
+component,carrier,bus_carrier,energiy_MWh
 Generator,Combined-Cycle Gas,AC,99818879.94873
 Generator,Offshore Wind (AC),AC,734.46178
 Generator,Offshore Wind (DC),AC,655.41042
