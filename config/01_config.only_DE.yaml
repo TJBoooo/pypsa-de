@@ -1,0 +1,276 @@
+# snakemake -n solve_elec_networks --cores 96 --configfile config/config.BA_NEP.yaml
+# snakemake -j1 --rerun-incomplete -p --show-failed-logs
+# snakemake -j1 -p --rerun-incomplete --show-failed-logs results/Test_cluster_focus_weights_base_network/KN2045_Elek/networks/base_s_150_elec_.nc
+# snakemake --cleanup-metadata
+#===============Version==============
+version: v2025.07.0
+#===============Tutorial==============
+tutorial: false
+#===============Logging==============
+logging:
+  level: INFO
+  format: "%(levelname)s:%(name)s:%(message)s"
+#===============Run==============
+run:
+  prefix: 'only_DE' # Keine: .
+  name: 'KN2045_Elek'
+#===============Szenario==============
+scenario:
+  clusters:
+  - 65 # Use ‘adm’ for administrative clustering mode, ‘all’ for all nodes.
+  planning_horizons:
+  - 2045
+#===============Countruies==============
+# docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#countries
+countries: ['DE'] # Countrieliste in config.de mit leerem Array versehen []!!
+#===============clustering==============
+clustering:
+  focus_weights: # focus_weights in config.de focus_weights = false setzem!
+  # only DE --> 100 %
+    'DE': 1.0
+#=============== electricity ==============
+# docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#electricity
+electricity:
+  voltages: [220., 300., 330., 380., 400., 500., 750.]
+  base_network: entsoegridkit
+  gaslimit_enable: false
+  gaslimit: false
+  co2limit_enable: false
+  co2limit: 7.75e+7
+  co2base: 1.487e+9
+
+  operational_reserve:
+    activate: false
+    epsilon_load: 0.02
+    epsilon_vres: 0.02
+    contingency: 4000
+
+  max_hours:
+    battery: 6
+    H2: 168
+
+  extendable_carriers:
+    Generator: [solar, solar-hsat, offwind-ac, offwind-dc, offwind-float, onwind,  OCGT, CCGT]
+    StorageUnit: [] # battery, H2
+    Store: [battery, H2]
+    Link: [] # H2 pipeline
+
+  powerplants_filter: (DateOut >= 2024 or DateOut != DateOut) and not (Country == 'Germany' and Fueltype == 'Nuclear')
+  custom_powerplants: false
+  everywhere_powerplants: []
+
+  conventional_carriers: [nuclear, oil, OCGT, CCGT, coal, lignite, geothermal, biomass]
+  renewable_carriers: [solar, solar-hsat, offwind-ac, offwind-dc, offwind-float, onwind,  hydro]
+
+  estimate_renewable_capacities:
+    enable: true
+    from_gem: true
+    year: 2020
+    expansion_limit: false
+    technology_mapping:
+      Offshore: [offwind-ac] #offwind-ac
+      Onshore: onwind
+      PV: solar
+
+  autarky:
+    enable: false
+    by_country: false
+
+  transmission_limit: vopt
+#===============Lines==============
+# docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#lines
+lines:
+  types:
+    63.: 94-AL1/15-ST1A 20.0
+    66.: 94-AL1/15-ST1A 20.0
+    90.: 184-AL1/30-ST1A 110.0
+    110.: 184-AL1/30-ST1A 110.0
+    132.: 243-AL1/39-ST1A 110.0
+    150.: 243-AL1/39-ST1A 110.0
+    220.: Al/St 240/40 2-bundle 220.0
+    300.: Al/St 240/40 3-bundle 300.0
+    330.: Al/St 240/40 3-bundle 300.0
+    380.: Al/St 240/40 4-bundle 380.0
+    400.: Al/St 240/40 4-bundle 380.0
+    500.: Al/St 240/40 4-bundle 380.0
+    750.: Al/St 560/50 4-bundle 750.0
+  s_max_pu: 0.7
+  s_nom_max: .inf
+  max_extension: 20000 #MW
+  length_factor: 1.25
+  reconnect_crimea: true
+  under_construction: keep # 'zero': set capacity to zero, 'remove': remove, 'keep': with full capacity for lines in grid extract
+  dynamic_line_rating:
+    activate: false
+    cutout: default
+    correction_factor: 0.95
+    max_voltage_difference: false
+    max_line_rating: false
+#===============Links==============
+# docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#links
+links:
+  p_max_pu: 1.0
+  p_min_pu: -1.0
+  p_nom_max: .inf
+  max_extension: 30000 #MW
+  length_factor: 1.25
+  under_construction: keep # 'zero': set capacity to zero, 'remove': remove, 'keep': with full capacity for lines in grid extract
+#===============Cost==============
+costs:
+  year: 2045
+  social_discountrate: 0.02
+  fill_values:
+    FOM: 0
+    VOM: 0
+    efficiency: 1
+    fuel: 0
+    investment: 0
+    lifetime: 25
+    CO2 intensity: 0
+    discount rate: 0.07
+    standing losses: 0
+  custom_cost_fn: data/custom_costs.csv
+  overwrites: {}
+  capital_cost: {}
+  marginal_cost: {}
+  emission_prices:
+    enable: false
+    co2: 0.0
+    co2_monthly_prices: false
+#===============Solving==============
+solving:
+  options:
+    clip_p_max_pu: 0.01
+    load_shedding: false
+    curtailment_mode: false
+    noisy_costs: true
+    skip_iterations: true
+    rolling_horizon: false
+    seed: 123
+    custom_extra_functionality: ../data/custom_extra_functionality.py
+    io_api:
+    track_iterations: false
+    min_iterations: 2
+    max_iterations: 3
+    transmission_losses: 2
+    linearized_unit_commitment: true
+    horizon: 365
+    post_discretization:
+      enable: false
+      line_unit_size: 1700
+      line_threshold: 0.3
+      link_unit_size:
+        DC: 2000
+        H2 pipeline: 1200
+        gas pipeline: 1500
+      link_threshold:
+        DC: 0.3
+        H2 pipeline: 0.3
+        gas pipeline: 0.3
+      fractional_last_unit_size: false
+    keep_files: false
+    model_kwargs:
+      solver_dir: ""
+  agg_p_nom_limits:
+    agg_offwind: false
+    agg_solar: false
+    include_existing: false
+    file: data/agg_p_nom_minmax.csv
+  constraints:
+    CCL: false
+    EQ: false
+    BAU: false
+    SAFE: false
+  solver:
+    name: gurobi
+    options: "gurobi-default"
+  #solver:
+  #  name: highs
+  #  options: "highs-simplex"
+  solver_options:
+    "highs-default":
+      threads: 1 #default: 1
+      solver: ipm
+      run_crossover: 'off'
+      small_matrix_value: 1.0e-06
+      large_matrix_value: 1000000000.0
+      primal_feasibility_tolerance: 1.0e-05
+      dual_feasibility_tolerance: 1.0e-05
+      ipm_optimality_tolerance: 0.0001
+      parallel: 'on'
+      random_seed: 123
+    "highs-simplex":
+      solver: simplex
+      parallel: 'on'
+      primal_feasibility_tolerance: 1.0e-05
+      dual_feasibility_tolerance: 1.0e-05
+      random_seed: 123
+    "gurobi-default":
+      threads: 64 # 64 probieren, sollte noch schneller gehen. # Mit 64 schnell zu viel Memory verbrauch!!
+      method: 2
+      crossover: 0
+      BarConvTol: 1.0e-05
+      Seed: 123
+      AggFill: 0
+      PreDual: 0
+      GURO_PAR_BARDENSETHRESH: 200
+    "gurobi-numeric-focus":
+      NumericFocus: 3
+      method: 2
+      crossover: 0
+      BarHomogeneous: 1
+      BarConvTol: 1.0e-05
+      FeasibilityTol: 0.0001
+      OptimalityTol: 0.0001
+      ObjScale: -0.5
+      threads: 8
+      Seed: 123
+    "gurobi-fallback":
+      crossover: 0
+      method: 2
+      BarHomogeneous: 1
+      BarConvTol: 1.0e-05
+      FeasibilityTol: 1.0e-05
+      OptimalityTol: 1.0e-05
+      Seed: 123
+      threads: 8
+    "cplex-default":
+      threads: 4
+      lpmethod: 4
+      solutiontype: 2
+      barrier.convergetol: 1.0e-05
+      feasopt.tolerance: 1.0e-06
+    "copt-default":
+      Threads: 8
+      LpMethod: 2
+      Crossover: 0
+      RelGap: 1.0e-06
+      Dualize: 0
+    "copt-gpu":
+      LpMethod: 6
+      GPUMode: 1
+      PDLPTol: 1.0e-05
+      Crossover: 0
+    "xpress-default":
+      threads: 8
+      lpflags: 4
+      crossover: 0
+      bargaptarget: 1.0e-05
+      baralg: 2
+    "xpress-gpu":
+      lpflags: 4
+      crossover: 0
+      baralg: 4
+      barhggpu: 1
+      barhgreltol: 1.0e-05
+    "cbc-default": {}
+    "glpk-default": {}
+  check_objective:
+    enable: false
+    expected_value:
+    atol: 1000000
+    rtol: 0.01
+  oetc:
+  mem_mb: 128000
+  memory_logging_frequency: 5
+  runtime: 48h
