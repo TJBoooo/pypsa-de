@@ -715,7 +715,7 @@ def main():
     ax.set_title(title)
     # ax.figure.suptitle(f"Subtitle", fontsize=12, fontweight="bold")
     # ax.figure.savefig(path_section / f'{title}_{prefix}_{name}.png', dpi=300, bbox_inches="tight") # Plot speichern
-    ax.figure.savefig(path_undersection / f'{title}_{prefix}_{name}.svg', bbox_inches="tight")
+    ax.figure.savefig(path_section / f'{title}_{prefix}_{name}.svg', bbox_inches="tight")
     plt.close(ax.figure)
 
     # =========================== Speicher_(Storage_Units) ===========================
