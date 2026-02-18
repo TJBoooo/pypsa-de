@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Contributors to PyPSA-Eur <https://github.com/pypsa/pypsa-eur>
 #
 # SPDX-License-Identifier: MIT
-# Unter Line 399 -- Filter für White & Blacklist eingebaut.
+
 
 """
 Gets the transmission projects defined in the config file, concatenates and
@@ -397,23 +397,6 @@ def add_projects(
         if isinstance(status, dict):
             status = status[plan]
         lines = lines.loc[lines.project_status.isin(status)]
-
-        # -------------------------------------------------
-        # Project filtering (Blacklist has priority)
-        # -------------------------------------------------
-        blacklist = snakemake.params.transmission_projects.get("project_blacklist", [])
-        whitelist = snakemake.params.transmission_projects.get("project_whitelist", [])
-
-        # 1) Blacklist first
-        if blacklist:
-            lines = lines.loc[~lines.index.isin(blacklist)]
-
-        # 2) Whitelist only applied if no blacklist is set
-        elif whitelist:
-            lines = lines.loc[lines.index.isin(whitelist)]
-
-        # -------------------------------------------------
-
         if lines.empty:
             continue
         if key == "new_lines":

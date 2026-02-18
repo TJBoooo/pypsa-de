@@ -12,7 +12,7 @@ logging:
   format: "%(levelname)s:%(name)s:%(message)s"
 #===============Run==============
 run:
-  prefix: 'only_DE_DC_transmission_nep_delet_links_over_500_km' # Keine: .
+  prefix: 'only_DE_DC_transmission_nep_delet_links_over_500_km_per_list_whit' # Keine: .
   name: 'KN2045_Elek'
 #===============Szenario==============
 scenario:
@@ -126,9 +126,19 @@ transmission_projects:
   skip:
   - upgraded_lines
   - upgraded_links
-  - new_links_copy_own
+  - new_links_cut
   - new_links_copy
-  project_blacklist: # Projekte werden entfernt #Priorität
+  # project_blacklist: # Projekte werden entfernt # Priorität
+  # - DC34
+  # - DC40
+  # - DC41
+  # - DC42
+  # - DC42plus
+  # - DC3
+  # - DC4
+  # - DC5
+  # - DC20
+  project_whitelist: #[] # Nur diese Projekte blieben # Wird keine Liste ausgefüllt/ beide ausgeklammert, so werden alle Projekte geladen
   - DC34
   - DC40
   - DC41
@@ -138,7 +148,6 @@ transmission_projects:
   - DC4
   - DC5
   - DC20
-  # project_whitelist: [] # Projekte werden hinzugefügt
   status:
   - under_construction
   - in_permitting
