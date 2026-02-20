@@ -148,16 +148,33 @@ if __name__ == "__main__":
     sns = get_snapshots(snakemake.params.snapshots, snakemake.params.drop_leap_day)
 
     cutout = load_cutout(snakemake.input.cutout, time=sns)
+    #===========================================================================
+    logger.warning(f"distance_regions file: {snakemake.input.distance_regions}")        # Onshore_base
+    logger.warning(f"availability_matrix file: {snakemake.input.availability_matrix}")
+    logger.warning(f"resource_regions file: {snakemake.input.resource_regions}")        # offshore
+    #===========================================================================
 
     availability = xr.open_dataarray(snakemake.input.availability_matrix)
 
     regions = gpd.read_file(snakemake.input.distance_regions)
+
+    #===========================================================================
+    if snakemake.wildcards.technology.startswith("offwind"):
+        # distance_regions must be offshore regions for offwind
+        regions = gpd.read_file(snakemake.input.resource_regions)
+
+
+    # Bei Offshore rutscht ihm die geojson: onshore_base_s_all rein!
+    #===========================================================================
+
     # do not pull up, set_index does not work if geo dataframe is empty
     regions = regions.set_index("name").rename_axis("bus")
+
     if snakemake.wildcards.technology.startswith("offwind"):
         # for offshore regions, the shortest distance to the shoreline is used
         offshore_regions = availability.coords["bus"].values
-        regions = regions.loc[offshore_regions]
+
+        regions = regions.loc[offshore_regions]  # --> Hier knallt es immer! Index fehler
         regions = regions.map(lambda g: _simplify_polys(g, minarea=1)).set_crs(
             regions.crs
         )

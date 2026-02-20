@@ -12,7 +12,7 @@ logging:
   format: "%(levelname)s:%(name)s:%(message)s"
 #===============Run==============
 run:
-  prefix: 'DE_NEP_corine_false' #________________________________  # Keine: . 
+  prefix: 'Referenzoptimierung' #________________________________  # Keine: . 
   name: 'KN2045_Elek'
 #===============Szenario==============
 scenario:
@@ -67,7 +67,7 @@ electricity:
     year: 2020
     expansion_limit: false
     technology_mapping:
-      Offshore: [offwind-ac, offwind-dc, offwind-float] #________________________________ #offwind-ac
+      Offshore: [offwind-ac]
       Onshore: onwind
       PV: solar
 
@@ -203,44 +203,6 @@ renewable:
     eia_norm_year: false
     eia_correct_by_capacity: false
     eia_approximate_missing: false
-#===============Lines==============
-# docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#lines
-lines:
-  types:
-    63.: 94-AL1/15-ST1A 20.0
-    66.: 94-AL1/15-ST1A 20.0
-    90.: 184-AL1/30-ST1A 110.0
-    110.: 184-AL1/30-ST1A 110.0
-    132.: 243-AL1/39-ST1A 110.0
-    150.: 243-AL1/39-ST1A 110.0
-    220.: Al/St 240/40 2-bundle 220.0
-    300.: Al/St 240/40 3-bundle 300.0
-    330.: Al/St 240/40 3-bundle 300.0
-    380.: Al/St 240/40 4-bundle 380.0
-    400.: Al/St 240/40 4-bundle 380.0
-    500.: Al/St 240/40 4-bundle 380.0
-    750.: Al/St 560/50 4-bundle 750.0
-  s_max_pu: 0.7
-  s_nom_max: .inf
-  max_extension: 20000 #MW
-  length_factor: 1.25
-  reconnect_crimea: true
-  under_construction: keep # 'zero': set capacity to zero, 'remove': remove, 'keep': with full capacity for lines in grid extract
-  dynamic_line_rating:
-    activate: false
-    cutout: default
-    correction_factor: 0.95
-    max_voltage_difference: false
-    max_line_rating: false
-#===============Links==============
-# docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#links
-links:
-  p_max_pu: 1.0
-  p_min_pu: -1.0
-  p_nom_max: .inf
-  max_extension: 30000 #MW
-  length_factor: 1.25
-  under_construction: keep  #________________________________ # 'zero': set capacity to zero, 'remove': remove, 'keep': with full capacity for lines in grid extract
 #===============transmission_projects==============
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#transmission_projects
 transmission_projects:
@@ -280,7 +242,7 @@ transmission_projects:
   - confirmed
     #- planned_not_yet_permitted
     #- under_consideration
-  new_link_capacity:  #________________________________ keep #keep or zero # config.default: zero, config.de: keep
+  new_link_capacity: keep #________________________________ keep #keep or zero # config.default: zero, config.de: keep
 #===============Cost==============
 costs:
   year: 2045 #________________________________
@@ -295,7 +257,7 @@ costs:
     CO2 intensity: 0
     discount rate: 0.07
     standing losses: 0
-  custom_cost_fn: data/pypsa-de/custom_costs_nep_2023.csv #________________________________
+  custom_cost_fn: data\pypsa-de\custom_costs_nep_2023_low_offwind.csv #________________________________
   transmission: "overhead" # either overhead line ("overhead") or underground cable ("underground")
   overwrites: {}
   capital_cost: {}
@@ -373,7 +335,7 @@ solving:
       dual_feasibility_tolerance: 1.0e-05
       random_seed: 123
     "gurobi-default":
-      threads: 64  #________________________________ # 64 probieren, sollte noch schneller gehen. # Mit 64 schnell zu viel Memory verbrauch!!
+      threads: 16  #________________________________ # 64 probieren, sollte noch schneller gehen. # Mit 64 schnell zu viel Memory verbrauch!!
       method: 2
       crossover: 0
       BarConvTol: 1.0e-05
