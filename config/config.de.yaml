@@ -659,11 +659,9 @@ plotting:
 
 electricity:
   renewable_carriers: [solar, solar-hsat, onwind, offwind-ac, offwind-dc, hydro] # removed offwind-float
-  powerplants_filter: (DateOut >= 2024 or DateOut != DateOut) and not (Country == "DE" and Set == "CHP")
+  powerplants_filter: (DateOut > 2025 or DateOut != DateOut) and not (Country == "DE" and Set == "CHP") and (DateIn < 2026 or DateIn != DateIn)
   custom_powerplants: true
   custom_file: resources/german_chp.csv
-  estimate_renewable_capacities:
-    year: 2024
   H2_plants:
     enable: EU # allowed values: false, DE, EU
     start: 2030 # should be < force
