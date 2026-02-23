@@ -1256,7 +1256,7 @@ def force_connection_nep_offshore(n, current_year, costs):
                 n.generators.at[node_off, "p_nom_min"] = 0
                 n.generators.at[node_off, "p_nom"] = 0
 
-            n.generators.at[node_off, "p_nom_min"] += dc_power.loc[node]
+            n.generators.at[node_off, "p_nom_min"] = dc_power.loc[node]
             n.generators.at[node_off, "connection_overnight_cost"] = (
                 dc_connection_overnight_costs.loc[node]
             )
@@ -1323,7 +1323,7 @@ def force_connection_nep_offshore(n, current_year, costs):
                     f"Assuming all AC projects are connected at locations where other generators exists. That is not the case for {node_off}. Terminating"
                 )
 
-            n.generators.at[node_off, "p_nom_min"] += ac_power.loc[node]
+            n.generators.at[node_off, "p_nom_min"] = ac_power.loc[node]
             n.generators.at[node_off, "connection_overnight_cost"] = (
                 ac_connection_overnight_costs.loc[node]
             )
