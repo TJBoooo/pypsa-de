@@ -34,7 +34,7 @@ def export_component_t(path_secion, component, title_cap, network):
         df = getattr(component, field)
         if df.empty == False:
             key_full.append(True)
-            df.to_csv(export_path / f'{field}_{prefix}_{name}.csv', index = True)
+            df.to_csv(export_path / f'{field}_{prefix}_{name}.csv', index = False)
         else: 
             key_full.append(False)
     
@@ -88,9 +88,9 @@ def statistic_plot(path_section, title, loading, prefix, name):
 # ============================================== MAIN ==============================================
 def main():
     # =========================== Wo liegt das Netzwerk / die .nc-Datei? ===========================
-    path_row = input("Bitte vollständigen Pfad zur .nc-Datei eingeben:\n> ").strip()
-    path_in = Path(path_row)
-    # path_in = Path(r"C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\only_DE\KN2045_Elek\networks\base_s_65_elec_.nc") # Auskommentieren, wenn fertig
+    # path_row = input("Bitte vollständigen Pfad zur .nc-Datei eingeben:\n> ").strip()
+    # path_in = Path(path_row)
+    path_in = Path(r"C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\BA_Referenzoptimierung\KN2045_Elek\networks\base_s_all_elec_.nc") # Auskommentieren, wenn fertig
     
     # =========================== Netzwerk Laden ===========================
     print("\nLade Netzwerk …\n")
@@ -701,14 +701,21 @@ def main():
     fig.savefig(path_undersection / f'{title}_{prefix}_{name}.svg', bbox_inches="tight")
     plt.close(fig)
 
-    # =========================== Loads ===========================
+    # =========================== Lasten_(Loads) ===========================
+    title_cap = 'Lasten_(Loads)'
     # Ordner erstellen
-    path_section = path / 'Lasten_(Loads)'
+    path_section = path / f'{title_cap}'
     path_section.mkdir(parents=True, exist_ok=True)
+    # ===================
+    title = f'Verwendete_{title_cap}'
+    n.loads.to_csv(path_section / f'{title}_{prefix}_{name}.csv', index = True)
+    # ===================
+    # Auspacken der Zeitreihen
+    export_component_t(path_section, n.links_t, title_cap, n)
+    # ===================
     #Time-varying component data
     title = 'n.loads'
     n.loads_t.p_set.sum(axis=1).to_csv(path_section / f"{title}_{prefix}_{name}.csv",index=True)
-    
     # Diagrammeinstellungen & Speichern
     ax = n.loads_t.p_set.sum(axis=1).plot(figsize=(15,3)) #MW?
     ax.set_ylabel("MW?")

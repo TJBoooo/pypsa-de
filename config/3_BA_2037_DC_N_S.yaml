@@ -12,16 +12,18 @@ logging:
   format: "%(levelname)s:%(name)s:%(message)s"
 #===============Run==============
 run:
-  prefix: 'BA_Referenzoptimierung' #________________________________  # Keine: . 
+  prefix: 'BA_2037_DC_N_S' #________________________________  # Keine: . 
   name: 'KN2045_Elek'
 #===============Szenario==============
 scenario:
+# Möglichst hohe Auflösung der Ergebnisse
   clusters:
   - all #________________________________ # Use ‘adm’ for administrative clustering mode, ‘all’ for all nodes. 
   planning_horizons:
   - 2045 #________________________________
 #===============Countruies==============
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#countries
+# Ausschließlich Deutschland
 countries: ['DE'] # Countrieliste in config.de mit leerem Array versehen []!!
 #===============clustering==============
 clustering:
@@ -29,6 +31,7 @@ clustering:
     'DE': 1.0 #________________________________ # only DE --> 100 %
 #=============== electricity ==============
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#electricity
+# Hier wurde das Basisnetzwerk angepasst, um auf die Entso-e Daten zuzugreifen.
 electricity:
   voltages: [220., 300., 330., 380., 400., 500., 750.]
   base_network: entsoegridkit #________________________________
@@ -78,6 +81,7 @@ electricity:
   transmission_limit: vopt #Hier kannst du auch noch was am Ausbau drehen
 #===============renewable==============
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#renewable
+# Einstellungen wurde verwendet, um den Bug der offwind zu beheben.
 renewable:
   onwind:
     cutout: default
@@ -205,6 +209,7 @@ renewable:
     eia_approximate_missing: false
 #===============transmission_projects==============
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#transmission_projects
+# Hinzufügen der White- und Blacklist für Szenariengestalltung
 transmission_projects:
   enable: true
   include:
@@ -216,26 +221,15 @@ transmission_projects:
   - upgraded_links
   - new_links_cut #________________________________
   - new_links_copy #________________________________
-  # project_blacklist: #________________________________ # Projekte werden entfernt # Priorität
-  # - DC34
-  # - DC40
-  # - DC41
-  # - DC42
-  # - DC42plus
-  # - DC3
-  # - DC4
-  # - DC5
-  # - DC20
+
+  # Alle DC-Links von Nord nach Süd betrachten -- ALle West-Ost-DC-Links ab 2037 raus!
+
+  project_blacklist: #________________________________ # Projekte werden entfernt # Priorität
+  - DC40
+  - DC40plus
+
   # project_whitelist: #[] #________________________________ # Nur diese Projekte blieben # Wird keine Liste ausgefüllt/ beide ausgeklammert, so werden alle Projekte geladen
-  # - DC34
-  # - DC40
-  # - DC41
-  # - DC42
-  # - DC42plus
-  # - DC3
-  # - DC4
-  # - DC5
-  # - DC20
+  
   status:
   - under_construction
   - in_permitting
@@ -244,6 +238,7 @@ transmission_projects:
     #- under_consideration
   new_link_capacity: keep #________________________________ keep #keep or zero # config.default: zero, config.de: keep
 #===============Cost==============
+# Kostenjahr wurde entsprechend eingestellt.
 costs:
   year: 2045 #________________________________
   social_discountrate: 0.02
@@ -267,6 +262,8 @@ costs:
     co2: 0.0
     co2_monthly_prices: false
 #===============Solving==============
+# Die Extrafunktionen des Adriane-Projekt wurde aufgrund von Funktionalität ausgestellt. Sie werden für die Sektorkopplung benötigt. Weiter wurde Gurobi als Solbver mit 16 Kernen eingestellt.
+# Die Anzahl der Kerne muss aufgrund des hohen RAM bedarfs so klein gewählt werden. 
 solving:
   options:
     clip_p_max_pu: 0.01
