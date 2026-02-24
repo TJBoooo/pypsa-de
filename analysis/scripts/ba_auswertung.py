@@ -4,12 +4,12 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 # =========================== Pakete für Plots ===========================
-import matplotlib.pyplot as plt
 import matplotlib as mpl
+import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
+import matplotlib.colors as mcolors
 plt.style.use('bmh')
 import cartopy.crs as ccrs
-import matplotlib.colors as mcolors
-
 # =========================== Funktionen ===========================
 # =========================== Netzwerk Laden ===========================
 def read_network(path_in):
@@ -46,7 +46,6 @@ def get_metadata(n, path, path_in):
             {"metric": "cluster", "value": n.meta['scenario']['clusters'][0]},
             {"metric": "planning_horizons", "value": n.meta['scenario']['planning_horizons'][0]},
         ]
-
     overview = pd.DataFrame(rows)  # Array in Dataframe überführen
     overview.to_csv(path / f'Metadaten_{prefix}.csv', index = False)
 # =========================== Allgemeiner erster Plot ===========================
@@ -69,165 +68,185 @@ def network_components(n, path_out):
                 rows.append({"Komponenten": name, "N": len(df)})
     pd.DataFrame(rows).to_csv(path_out / f'Komponenten_{n.meta['run']['prefix']}.csv', index = False)
 # ========= Hinzufügen Diconary ========= 
-def to_energy_dic(dic, category, name, value):
+def to_run_dic(dic, category, name, value):
     dic.setdefault(category, {})
     dic[category][name] = float(value)
 # ========= Speichern Diconary =========
-def save_energy_dic(n, dic, path_out):
-    print(dic)
-    # dic = pd.DataFrame.from_dict(dic, orient="index", columns=["value"])
-    # dic.to_csv(path_out / f'Generatortechnologien_{n.meta['run']['prefix']}.csv', index = True)
+# ========= Speichern Diconary =========
+def save_run_dic(n, dic, path_out):
+    df = pd.DataFrame(dic)
+    df.to_csv(path_out / f'Diconary_run_{n.meta['run']['prefix']}.csv', index = True)
+# ========= Technologieart nach Energieart sortieren =========
+def gen_carrier_key():
+    gen_carrier_map = pd.Series({ # Serie mit Energiearten
+        "CCGT": "Gas", 
+        "OCGT": "Gas", 
+        "biomass": "Biomasse", 
+        "coal": "Kohle", 
+        "lignite": "Braunkohle", # Braunkohle 
+        "nuclear": "Kernenergie", 
+        "offwind-ac": "Wind",
+        "offwind-dc": "Wind",
+        "offwind-float": "Wind",
+        "oil": "Öl",
+        "onwind": "Wind",
+        "ror": "Wasserkraft", 
+        "solar": "Solar", 
+        "solar-hsat": "Solar" 
+    })
+    return gen_carrier_map # Technologien den Oberarten zuordnen
+# ========= Technologiefarben mischen =========
+def color_of_energy(n):
+    # Feste Farben je Energieart (konstant für alle Plots)
+    energy_colors = {
+        "Biomasse": n.carriers.color.get('biomass', '#999999'),
+        "Braunkohle": n.carriers.color.get('lignite', '#999999'),
+        "Kernenergie":  n.carriers.color.get('nuclear', '#999999'),
+        "Kohle":  n.carriers.color.get('coal', '#999999'),
+        "Gas":  n.carriers.color.get('CCGT', '#999999'),
+        "Solar":  n.carriers.color.get('solar', '#999999'),
+        "Wasserkraft":  n.carriers.color.get('ror', '#999999'),
+        "Wind":  n.carriers.color.get('onwind', '#999999'),
+        "Öl":  n.carriers.color.get('oil', '#999999')
+    }
+    return energy_colors
 # ========= Generatordaten =========
 def get_gen_data(n, path_out):
     gen_list = (n.generators.bus.to_frame('bus')
                 .join(n.generators[['efficiency', 'p_max_pu', 'p_nom', 'p_nom_opt']])
-                .join(((n.generators.p_nom_opt.sort_index() - n.generators.p_nom.sort_index()).rename('extendable_mw')))
+                .join(((n.generators.p_nom_opt.sort_index() - n.generators.p_nom.sort_index()).rename('expansion_mw')))
                 .join(n.generators[['p_nom_extendable', 'carrier', 'marginal_cost', 'capital_cost','overnight_cost']])
-                .join((n.generators.capital_cost * (n.generators.p_nom_opt - n.generators.p_nom)).rename('extended_cost'))
+                .join((n.generators.capital_cost * (n.generators.p_nom_opt - n.generators.p_nom)).rename('expansion_cost_EUR'))
                 .join(n.generators_t.p.sum().rename('energy_2045_MWh'))
+                .join((n.generators_t.p.sum() / n.generators.p_nom_opt).rename('full_load_hours_h'))
                 )
-    carrier_list = (
+    gen_carrier_list = (
                 gen_list.p_nom_opt.groupby(gen_list.carrier).sum().to_frame('p_nom_opt_mw')
                 .join(gen_list.p_nom.groupby(gen_list.carrier).sum().rename('p_nom_mw'))
-                .join(gen_list.extendable_mw.groupby(gen_list.carrier).sum().rename('extendeble_mw'))
+                .join(gen_list.expansion_mw.groupby(gen_list.carrier).sum())
                 .join(gen_list.carrier.value_counts().rename('n_generators'))
                 .join(gen_list.marginal_cost.groupby(gen_list.carrier).mean().rename('marginal_cost_€_mw'))
                 .join(gen_list.capital_cost.groupby(gen_list.carrier).mean().rename('capital_cost_€'))
                 .join(gen_list.overnight_cost.groupby(gen_list.carrier).mean().rename('overnight_cost_€'))
-                .join(gen_list.extended_cost.groupby(gen_list.carrier).mean().rename('extended_cost'))
+                .join(gen_list.expansion_cost_EUR.groupby(gen_list.carrier).sum())
                 .join((gen_list.energy_2045_MWh.groupby(n.generators.carrier).sum()))
+                .join(gen_list.full_load_hours_h.groupby(n.generators.carrier).sum())
                 )
-    carrier_list = carrier_list.join((n.carriers["color"]).loc[carrier_list.index])
+    gen_carrier_list = gen_carrier_list.join((n.carriers["color"]).loc[gen_carrier_list.index])
     gen_list.to_csv(path_out / f'Generatoren_{n.meta['run']['prefix']}.csv', index = True)
-    carrier_list.to_csv(path_out / f'Generatortechnologien_{n.meta['run']['prefix']}.csv', index = True)
-    return (gen_list, carrier_list)
+    gen_carrier_list.to_csv(path_out / f'Generatortechnologien_{n.meta['run']['prefix']}.csv', index = True)
+    return (gen_list, gen_carrier_list)
 # ========= Meritorder =========
 def merit_order(n, gen_list, path_out):
+    # Sortieren für Meritorder
     df_merit = (gen_list.sort_values('marginal_cost',ascending=True).marginal_cost.to_frame()
             .join(gen_list.sort_values('marginal_cost',ascending=True).p_nom_opt.cumsum().rename('p_nom_opt_cum'))
             .join(gen_list[['carrier', 'p_nom_opt']]))
+
     df_merit.to_csv(path_out / f'Meritorder_{n.meta['run']['prefix']}.csv', index = True)
-    # Erwartet: df_merit mit Spalten: marginal_cost, p_nom_opt, carrier
+
+    # Balken-Start (linke Kante)
     df_merit["left_MW"] = df_merit["p_nom_opt_cum"] - df_merit["p_nom_opt"]
 
-    # Farben je Carrier aus Pypsa Carrier
-    color_map = n.carriers["color"].to_dict()
-    colors = df_merit["carrier"].map(color_map).fillna("#999999").tolist()
+    # --------- Energieart + Farben ---------
+    carrier_map = gen_carrier_key()              # dict: carrier -> Energieart
+    df_merit["energy_type"] = df_merit["carrier"].map(carrier_map)
 
+    energy_colors = color_of_energy(n)               # dict: Energieart -> HEX
+    colors = df_merit["energy_type"].map(energy_colors).fillna("#999999").tolist()
+
+    # Plot
     fig, ax = plt.subplots(figsize=(14, 6))
 
     ax.bar(
-        df_merit["left_MW"] / 1000.0,       # Start in GW
-        df_merit["marginal_cost"],          # Höhe in €/MWh
-        width=df_merit["p_nom_opt"] / 1000.0,  # Breite in GW -- Mengenachse!!
+        df_merit["left_MW"] / 1000.0,           # Start in GW
+        df_merit["marginal_cost"],              # Höhe in €/MWh
+        width=df_merit["p_nom_opt"] / 1000.0,   # Breite in GW (Mengenachse)
         align="edge",
         color=colors
     )
 
     ax.set_xlabel("Kummulierte Kapazität (GW)")
     ax.set_ylabel("Grenzkosten (€/MWh)")
-    ax.set_title("Meritorder ")
-
-    # Generator-Namen auf der x-Achse entfernen
-    ax.set_xticks([])
-    ax.set_xticklabels([])
+    ax.set_title("Meritorder")
 
     # Maximalwert der kumulierten Leistung in GW
     x_max = df_merit["p_nom_opt_cum"].iloc[-1] / 1000.0
 
-    # Automatisch sinnvolle Tick-Anzahl erzeugen (z.B. 8 Schritte)
+    # Sinnvolle Ticks (z.B. 8 Schritte => 9 Werte inkl. 0)
     ticks = np.linspace(0, x_max, 9)
-
     ax.set_xticks(ticks)
     ax.set_xticklabels([f"{t:.0f}" for t in ticks])
 
-    # Legendeneinträge pro Carrier (Proxy-Patches)
-    from matplotlib.patches import Patch
-    handles = []
-    seen = set()
-    for c, col in zip(df_merit["carrier"], colors):
-        if c not in seen:
-            handles.append(Patch(facecolor=col, label=c))
-            seen.add(c)
+    # --------- Legende: Energiearten (statt carrier) ---------
+    # feste Reihenfolge (optional), nur vorhandene anzeigen
+    legend_order = [
+        "Braunkohle", "Kohle", "Gas", "Öl",
+        "Kernenergie",
+        "Wind", "Solar", "Wasserkraft", "Biomasse"
+    ]
+    present = set(df_merit["energy_type"].dropna().unique())
 
-    ax.legend(handles=handles, title="Carrier", loc="upper left", bbox_to_anchor=(1.02, 1))
+    handles = [
+        Patch(facecolor=energy_colors.get(e, "#999999"), label=e)
+        for e in legend_order
+        if e in present
+    ]
 
-    ax.set_xlim(0, df_merit["p_nom_opt_cum"].iloc[-1] / 1000.0)
+    ax.legend(
+        handles=handles,
+        title="Energieart",
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1)
+    )
+
+    ax.set_xlim(0, x_max)
     ax.set_ylim(bottom=0)
-    
+
     plt.tight_layout()
 
     fig.savefig(path_out / f'Meritorder_{n.meta['run']['prefix']}.svg', bbox_inches="tight")
     plt.close(fig)
-# ========= Technologieart nach Energieart sortieren =========
-def energy_key(list):
-    carrier_map = pd.Series({ # Serie mit Energiearten
-        "CCGT": "Gas",
-        "OCGT": "Gas",
-        "biomass": "renewable",
-        "coal": "fossil",
-        "lignite": "fossil", # Braunkohle
-        "nuclear": "nuclear",
-        "offwind-ac": "renewable",
-        "offwind-dc": "renewable",
-        "offwind-float": "renewable",
-        "oil": "fossil",
-        "onwind": "renewable",
-        "ror": "water-power",
-        "solar": "renewable",
-        "solar-hsat": "renewable"
-    })
-    return (list.energy_2045_MWh.T.groupby(carrier_map).sum().T) # Technologien den Energiearten zuordnen
-# ========= Technologiefarben mischen =========
-def color_of_energy():
-    # Feste Farben je Energieart (konstant für alle Plots)
-    energy_colors = {
-        "renewable": "#54a24b",
-        "fossil": "#4c4c4c",
-        "Gas": "#f58518",
-        "water-power": "#4c78a8",
-        "nuclear": "#b279a2"
-    }
-    return energy_colors
 # ========= %-EE-Jahresenergie (Erzeugt) =========
 def pc_year_energy(n, carrier_list, path_out):
+    data = carrier_list.groupby(gen_carrier_key()).sum().energy_2045_MWh
+    energy_pc = data / data.sum() # Prozente rechnen
 
-    energy_by_energyart = energy_key(carrier_list)
-
-    data = energy_by_energyart.dropna()
+    data = data.dropna()
     data = data[data > 0]
+    data = data[energy_pc > 0.001] # Nur Werte über 0.1 %
 
-    colors = [color_of_energy()[e] for e in data.index]
+    colors = [color_of_energy(n)[e] for e in data.index]
 
     fig, ax = plt.subplots(figsize=(7, 7))
 
     ax.pie(
         data,
         labels=data.index,
-        autopct="%1.1f%%",
+        autopct="%1.2f%%",
         startangle=90,
         colors=colors
     )
-    plt.title(f"Energieverteilung {n.meta['scenario']['planning_horizons'][0]} [MWh]")
+    plt.title(f"Energieerzeugung {n.meta['scenario']['planning_horizons'][0]}\nGesamterzeugung: {carrier_list.energy_2045_MWh.sum() / 1e6:.1f} [TWh]")
     plt.ylabel("")
     
     fig.savefig(path_out / f'Energiearten_prozentual_{n.meta['run']['prefix']}.svg', bbox_inches="tight")
     plt.close(fig)
     # ========= AC-Daten =========
 def get_ac_data(n):
-    if n.lines_t.q0.empty == True: # Prüfung, ob Blindleistung mit Engerichtet wurde
+    if n.lines_t.q0.empty == True: # Prüfung, ob Blindleistung mit Eingerichtet wurde
         S = n.lines_t.p0.abs() # |p0| wenn Q≈0 -- abs() -- betrag der Wirkleistung
     else:
         S = (n.lines_t.p0 ** 2 + n.lines_t.q0 ** 2) ** 0.5
 
     loading_max = ((S.max() # Maximalwert!
-        .sort_index() # mean() arithmetisches Mittel aller Zeitwerte -- sort_index() im Nenner & im Zähler! -- richtige Reihenfolge
+        .sort_index() #sort_index() im Nenner & im Zähler! -- richtige Reihenfolge
           / (n.lines.s_nom_opt * n.lines.s_max_pu).sort_index() # .s_max_pu -- Zulässiger Anteil von s_nom_opt
            ).fillna(0.0))
     
     loading_mean = ((
         S.mean() # Mittelwert!!
-        .sort_index() # mean() arithmetisches Mittel aller Zeitwerte -- sort_index() im Nenner & im Zähler! -- richtige Reihenfolge
+        .sort_index() # sort_index() im Nenner & im Zähler! -- richtige Reihenfolge
           / 
           (n.lines.s_nom_opt * n.lines.s_max_pu).sort_index() # .s_max_pu -- Zulässiger Anteil von s_nom_opt
            ).fillna(0.0))
@@ -248,7 +267,7 @@ def main():
     # ===== PFAD =====
     # path_row = input("Bitte vollständigen Pfad zur .nc-Datei eingeben:\n> ").strip()
     # path_in = Path(path_row)
-    path_in = Path(r"C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\BA_Referenzoptimierung\KN2045_Elek\networks\base_s_all_elec_.nc") # Auskommentieren, wenn fertig
+    path_in = Path(r"C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\BA_2037_DC_W_O\KN2045_Elek\networks\base_s_all_elec_.nc") # Auskommentieren, wenn fertig
     # ===== Netzwerk einlesen =====
     n = read_network(path_in)
     # ===== Ablageordner erstellen =====
@@ -258,15 +277,15 @@ def main():
     plot_network(n, path_out)
     network_components(n, path_out)
     # ===== Diconary für Energy anlegen =====
-    energy_dic = {}
+    run_dic = {}
     # ===== Generatoren =====
-    gen_list, carrier_list = get_gen_data(n, path_out)
+    gen_list, gen_carrier_list = get_gen_data(n, path_out)
     merit_order(n, gen_list, path_out)
-    pc_year_energy(n, carrier_list, path_out)
-    to_energy_dic(energy_dic, 'Gesamtenergie_[MWh]', 'generator', (gen_list.energy_2045_MWh.sum()))
-    to_energy_dic(energy_dic,  'Gesamtkostem_[€]', 'generator', gen_list['extended_cost'].sum())
+    pc_year_energy(n, gen_carrier_list, path_out)
+    to_run_dic(run_dic, 'Gesamtenergie_[MWh]', 'generator', (gen_list.energy_2045_MWh.sum()))
+    to_run_dic(run_dic,  'Gesamtkostem_[€]', 'generator', gen_list['expansion_cost_EUR'].sum())
     # ===== Lasten =====
-    to_energy_dic(energy_dic, 'Gesamtenergie_[MWh]', 'Last', n.loads_t.p.sum().sum())
+    to_run_dic(run_dic, 'Gesamtenergie_[MWh]', 'Last', n.loads_t.p.sum().sum())
 
 
 
@@ -292,7 +311,7 @@ def main():
 
 
     # ===== Diconary für Energy speichern =====
-    save_energy_dic(n, energy_dic, path_out)
+    save_run_dic(n, run_dic, path_out)
 if __name__ == "__main__":
     main()
     print('\nFinsih')

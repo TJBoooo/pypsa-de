@@ -90,7 +90,7 @@ def main():
     # =========================== Wo liegt das Netzwerk / die .nc-Datei? ===========================
     # path_row = input("Bitte vollständigen Pfad zur .nc-Datei eingeben:\n> ").strip()
     # path_in = Path(path_row)
-    path_in = Path(r"C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\BA_Referenzoptimierung\KN2045_Elek\networks\base_s_all_elec_.nc") # Auskommentieren, wenn fertig
+    path_in = Path(r"C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\BA_2037_DC_W_O\KN2045_Elek\networks\base_s_all_elec_.nc") # Auskommentieren, wenn fertig
     
     # =========================== Netzwerk Laden ===========================
     print("\nLade Netzwerk …\n")
@@ -101,7 +101,7 @@ def main():
 
     # =========================== Zielordner erstellen & Pfad zwischenspeichern ===========================
     base = Path(r"C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de/results") #\analysis
-    path = base / prefix / name / 'analysis' / f'c_{n.meta['scenario']['clusters']}' # Def for later
+    path = base / prefix / name / 'analysis' / f'c_{n.meta['scenario']['clusters'][0]}' # Def for later
     path.mkdir(parents=True, exist_ok=True) # parents --> fehlende Ordner automatisch anlegen, exist_ok --> Kein Fehler, wenn Order schon da
     print('Results:', path, '\n')
 
@@ -717,8 +717,8 @@ def main():
     title = 'n.loads'
     n.loads_t.p_set.sum(axis=1).to_csv(path_section / f"{title}_{prefix}_{name}.csv",index=True)
     # Diagrammeinstellungen & Speichern
-    ax = n.loads_t.p_set.sum(axis=1).plot(figsize=(15,3)) #MW?
-    ax.set_ylabel("MW?")
+    ax = n.loads_t.p_set.sum(axis=1).plot(figsize=(15,3)) #MW
+    ax.set_ylabel("MW")
     ax.set_title(title)
     # ax.figure.suptitle(f"Subtitle", fontsize=12, fontweight="bold")
     # ax.figure.savefig(path_section / f'{title}_{prefix}_{name}.png', dpi=300, bbox_inches="tight") # Plot speichern
