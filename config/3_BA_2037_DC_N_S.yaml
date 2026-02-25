@@ -37,7 +37,7 @@ electricity:
   base_network: entsoegridkit #________________________________
   gaslimit_enable: false
   gaslimit: false
-  co2limit_enable: true
+  co2limit_enable: true #________________________________
   co2limit: 7.75e+7
   co2base: 1.487e+9
 

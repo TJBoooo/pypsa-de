@@ -27,7 +27,7 @@ scenario:
 countries: ['DE'] # Countrieliste in config.de mit leerem Array versehen []!!
 #===============clustering==============
 clustering:
-  focus_weights: #________________________________ # focus_weights in config.de focus_weights = false setzem!
+  focus_weights: # focus_weights in config.de focus_weights = false setzem!
     'DE': 1.0 #________________________________ # only DE --> 100 %
   #=============== electricity ==============
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#electricity
@@ -37,7 +37,7 @@ electricity:
   base_network: entsoegridkit #________________________________
   gaslimit_enable: false
   gaslimit: false
-  co2limit_enable: false
+  co2limit_enable: true #________________________________
   co2limit: 7.75e+7
   co2base: 1.487e+9
 
@@ -91,19 +91,10 @@ transmission_projects:
   skip:
   - upgraded_lines
   - upgraded_links
-  - new_links_cut #________________________________
-  - new_links_copy #________________________________
-  # project_blacklist: #________________________________ # Projekte werden entfernt # Priorität
-  # - DC34
-  # - DC40
-  # - DC41
-  # - DC42
-  # - DC42plus
-  # - DC3
-  # - DC4
-  # - DC5
-  # - DC20
-  # project_whitelist: #[] #________________________________ # Nur diese Projekte blieben # Wird keine Liste ausgefüllt/ beide ausgeklammert, so werden alle Projekte geladen
+  - new_links_cut 
+  - new_links_copy 
+  # project_blacklist: [] #________________________________ # Projekte werden entfernt # Priorität
+  # project_whitelist: #[] # Nur diese Projekte blieben # Wird keine Liste ausgefüllt/ beide ausgeklammert, so werden alle Projekte geladen
   status:
   - under_construction
   - in_permitting

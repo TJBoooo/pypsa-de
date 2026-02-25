@@ -90,11 +90,11 @@ def carrier_key():
         "coal": "Kohle", 
         "lignite": "Braunkohle", # Braunkohle 
         "nuclear": "Kernenergie", 
-        "offwind-ac": "Wind",
-        "offwind-dc": "Wind",
-        "offwind-float": "Wind",
+        "offwind-ac": "Offwind",
+        "offwind-dc": "Offwind",
+        "offwind-float": "Offwind",
         "oil": "Öl",
-        "onwind": "Wind",
+        "onwind": "Onwind",
         "ror": "Wasserkraft", 
         "solar": "Solar", 
         "solar-hsat": "Solar",
@@ -112,7 +112,8 @@ def color_key(n):
         "Gas":  n.carriers.color.get('CCGT', '#999999'),
         "Solar":  n.carriers.color.get('solar', '#999999'),
         "Wasserkraft":  n.carriers.color.get('ror', '#999999'),
-        "Wind":  n.carriers.color.get('onwind', '#999999'),
+        "Onwind":  n.carriers.color.get('onwind', '#999999'),
+        "Offwind": n.carriers.color.get('offwind-ac', '#999999'),
         "Öl":  n.carriers.color.get('oil', '#999999'),
         'Gesamtlast': "#F90909",
         'Gesamteinspeisung':  "#1DF909",
@@ -260,7 +261,7 @@ def merit_order(n, gen_list, path_out):
     fig.savefig(path_out / f'Meritorder_{n.meta['run']['prefix']}.svg', bbox_inches="tight")
     plt.close(fig)
 # ========= %-EE-Jahresenergie (Erzeugt) =========
-def make_cake_dia(n, data, path_out, title):
+def make_cake_dia(n, data, path_out, title): #Wind in off und on unterteilen!
     energy_pc = data / data.sum() # Prozente rechnen
 
     data = data.dropna()
@@ -398,9 +399,9 @@ def multiple_to_run_dic(run_dic, component, list): # component: Generator, AC-Le
 # ============================================== MAIN ==============================================
 def main():
     # ===== PFAD =====
-    # path_row = input("Bitte vollständigen Pfad zur .nc-Datei eingeben:\n> ").strip()
-    # # path_in = Path(path_row)
-    path_in = Path(r"C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\BA_Referenzoptimierung\KN2045_Elek\networks\base_s_all_elec_.nc") # Auskommentieren, wenn fertig
+    path_row = input("Bitte vollständigen Pfad zur .nc-Datei eingeben:\n> ").strip()
+    path_in = Path(path_row)
+    # path_in = Path(r"C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\BA_Referenzoptimierung\KN2045_Elek\networks\base_s_all_elec_.nc") # Auskommentieren, wenn fertig
     # ===== Netzwerk einlesen =====
     n = read_network(path_in)
     # ===== Ablageordner erstellen =====
