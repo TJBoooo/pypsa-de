@@ -90,7 +90,7 @@ def main():
     # =========================== Wo liegt das Netzwerk / die .nc-Datei? ===========================
     # path_row = input("Bitte vollständigen Pfad zur .nc-Datei eingeben:\n> ").strip()
     # path_in = Path(path_row)
-    path_in = Path(r"C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\BA_2037_DC_W_O\KN2045_Elek\networks\base_s_all_elec_.nc") # Auskommentieren, wenn fertig
+    path_in = Path(r"C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\BA_2037_DC_N_S\KN2045_Elek\networks\base_s_all_elec_.nc") # Auskommentieren, wenn fertig
     
     # =========================== Netzwerk Laden ===========================
     print("\nLade Netzwerk …\n")
