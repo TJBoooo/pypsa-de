@@ -12,7 +12,7 @@ logging:
   format: "%(levelname)s:%(name)s:%(message)s"
 #===============Run==============
 run:
-  prefix: 'BA_Referenzoptimierung' #________________________________  # Keine: . 
+  prefix: '1_BA_Referenzoptimierung' #________________________________  # Keine: . 
   name: 'KN2045_Elek'
 #===============Szenario==============
 scenario:
@@ -29,7 +29,7 @@ countries: ['DE'] # Countrieliste in config.de mit leerem Array versehen []!!
 clustering:
   focus_weights: #________________________________ # focus_weights in config.de focus_weights = false setzem!
     'DE': 1.0 #________________________________ # only DE --> 100 %
-#=============== electricity ==============
+  #=============== electricity ==============
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#electricity
 # Hier wurde das Basisnetzwerk angepasst, um auf die Entso-e Daten zuzugreifen.
 electricity:
@@ -79,134 +79,6 @@ electricity:
     by_country: false
 
   transmission_limit: vopt #Hier kannst du auch noch was am Ausbau drehen
-#===============renewable==============
-# docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#renewable
-# Einstellungen wurde verwendet, um den Bug der offwind zu beheben.
-renewable:
-  onwind:
-    cutout: default
-    resource:
-      method: wind
-      turbine: Vestas_V112_3MW
-      smooth: false
-      add_cutout_windspeed: true
-    resource_classes: 1
-    capacity_per_sqkm: 3
-    # correction_factor: 0.93
-    corine:
-      grid_codes: [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 31, 32]
-      distance: 1000
-      distance_grid_codes: [1, 2, 3, 4, 5, 6]
-    luisa: false
-      # grid_codes: [1111, 1121, 1122, 1123, 1130, 1210, 1221, 1222, 1230, 1241, 1242]
-      # distance: 1000
-      # distance_grid_codes: [1111, 1121, 1122, 1123, 1130, 1210, 1221, 1222, 1230, 1241, 1242]
-    natura: true
-    excluder_resolution: 100
-    clip_p_max_pu: 1.e-2
-  offwind-ac:
-    cutout: default
-    resource:
-      method: wind
-      turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
-      smooth: false
-      add_cutout_windspeed: true
-    resource_classes: 1
-    capacity_per_sqkm: 2
-    correction_factor: 0.8855
-    corine: false # [44, 255] #________________________________
-    luisa: false # [0, 5230]
-    natura: true
-    ship_threshold: 400
-    max_depth: 60
-    max_shore_distance: 30000
-    excluder_resolution: 200
-    clip_p_max_pu: 1.e-2
-    landfall_length: 20
-  offwind-dc:
-    cutout: default
-    resource:
-      method: wind
-      turbine: NREL_ReferenceTurbine_2020ATB_5.5MW
-      smooth: false
-      add_cutout_windspeed: true
-    resource_classes: 1
-    capacity_per_sqkm: 2
-    correction_factor: 0.8855
-    corine: false # [44, 255] #________________________________
-    luisa: false # [0, 5230]
-    natura: true
-    ship_threshold: 400
-    max_depth: 60
-    min_shore_distance: 30000
-    excluder_resolution: 200
-    clip_p_max_pu: 1.e-2
-    landfall_length: 30
-  offwind-float:
-    cutout: default
-    resource:
-      method: wind
-      turbine: NREL_ReferenceTurbine_5MW_offshore
-      smooth: false
-      add_cutout_windspeed: true
-    resource_classes: 1
-    # ScholzPhd Tab 4.3.1: 10MW/km^2
-    capacity_per_sqkm: 2
-    correction_factor: 0.8855
-    # proxy for wake losses
-    # from 10.1016/j.energy.2018.08.153
-    # until done more rigorously in #153
-    corine: false # [44, 255] #________________________________
-    natura: true
-    ship_threshold: 400
-    excluder_resolution: 200
-    min_depth: 60
-    max_depth: 1000
-    clip_p_max_pu: 1.e-2
-    landfall_length: 40
-  solar:
-    cutout: default
-    resource:
-      method: pv
-      panel: CSi
-      orientation:
-        slope: 35.
-        azimuth: 180.
-    resource_classes: 1
-    capacity_per_sqkm: 5.1
-    # correction_factor: 0.854337
-    corine: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 26, 31, 32]
-    luisa: false # [1111, 1121, 1122, 1123, 1130, 1210, 1221, 1222, 1230, 1241, 1242, 1310, 1320, 1330, 1410, 1421, 1422, 2110, 2120, 2130, 2210, 2220, 2230, 2310, 2410, 2420, 3210, 3320, 3330]
-    natura: true
-    excluder_resolution: 100
-    clip_p_max_pu: 1.e-2
-  solar-hsat:
-    cutout: default
-    resource:
-      method: pv
-      panel: CSi
-      orientation:
-        slope: 35.
-        azimuth: 180.
-      tracking: horizontal
-    resource_classes: 1
-    capacity_per_sqkm: 4.43 # 15% higher land usage acc. to NREL
-    corine: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 26, 31, 32]
-    luisa: false # [1111, 1121, 1122, 1123, 1130, 1210, 1221, 1222, 1230, 1241, 1242, 1310, 1320, 1330, 1410, 1421, 1422, 2110, 2120, 2130, 2210, 2220, 2230, 2310, 2410, 2420, 3210, 3320, 3330]
-    natura: true
-    excluder_resolution: 100
-    clip_p_max_pu: 1.e-2
-  hydro:
-    cutout: default
-    carriers: [ror, PHS, hydro]
-    PHS_max_hours: 6
-    hydro_max_hours: energy_capacity_totals_by_country # one of energy_capacity_totals_by_country, estimate_by_large_installations or a float
-    flatten_dispatch: false
-    flatten_dispatch_buffer: 0.2
-    clip_min_inflow: 1.0
-    eia_norm_year: false
-    eia_correct_by_capacity: false
-    eia_approximate_missing: false
 #===============transmission_projects==============
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#transmission_projects
 # Hinzufügen der White- und Blacklist für Szenariengestalltung
@@ -239,6 +111,11 @@ transmission_projects:
     #- planned_not_yet_permitted
     #- under_consideration
   new_link_capacity: keep #________________________________ keep #keep or zero # config.default: zero, config.de: keep
+#===============snapshots==============
+snapshots:
+  start: '2019-01-01'
+  end: '2020-01-01'
+  inclusive: left
 #===============Cost==============
 # Kostenjahr wurde entsprechend eingestellt.
 costs:
@@ -334,7 +211,7 @@ solving:
       dual_feasibility_tolerance: 1.0e-05
       random_seed: 123
     "gurobi-default":
-      threads: 12  #________________________________ # 64 probieren, sollte noch schneller gehen. # Mit 64 schnell zu viel Memory verbrauch!!
+      threads: 16  #________________________________ # 64 probieren, sollte noch schneller gehen. # Mit 64 schnell zu viel Memory verbrauch!!
       method: 2
       crossover: 0
       BarConvTol: 1.0e-05
@@ -399,6 +276,6 @@ solving:
     atol: 1000000
     rtol: 0.01
   oetc:
-  mem_mb: 128000
+  mem_mb: 360000 # 128000 #________________________________
   memory_logging_frequency: 5
   runtime: 48h
