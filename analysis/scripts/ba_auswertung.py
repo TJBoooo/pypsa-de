@@ -72,7 +72,11 @@ def network_components(n, path_out):
 # ========= Hinzufügen Diconary ========= 
 def to_run_dic(dic, category, name, value):
     dic.setdefault(category, {})
-    dic[category][name] = float(value)
+    
+    if isinstance(value, (int, float)):
+        dic[category][name] = float(value)
+    else:
+        dic[category][name] = value
 # ========= Speichern Diconary =========
 def save_run_dic(n, dic, path_out):
     df = pd.DataFrame(dic)
@@ -164,7 +168,7 @@ def get_gen_data(n, path_out):
     gen_list = (n.generators.bus.to_frame('bus')
                 .join(n.generators[['efficiency', 'p_max_pu', 'p_nom', 'p_nom_opt']])
                 .join(((n.generators.p_nom_opt.sort_index() - n.generators.p_nom.sort_index()).rename('expansion_mw')))
-                .join(n.generators[['p_nom_extendable', 'carrier', 'marginal_cost', 'capital_cost','overnight_cost']])
+                .join(n.generators[['p_nom_extendable', 'carrier', 'marginal_cost', 'capital_cost']])
                 .join((n.generators.capital_cost * (n.generators.p_nom_opt - n.generators.p_nom)).rename('expansion_cost_EUR'))
                 .join(n.generators_t.p.sum().rename('energy_2045_MWh'))
                 .join((n.generators_t.p.sum() / n.generators.p_nom_opt).rename('full_load_hours_h'))
@@ -176,7 +180,6 @@ def get_gen_data(n, path_out):
                 .join(gen_list.carrier.value_counts().rename('n_generators'))
                 .join(gen_list.marginal_cost.groupby(gen_list.carrier).mean().rename('marginal_cost_€_mw'))
                 .join(gen_list.capital_cost.groupby(gen_list.carrier).mean().rename('capital_cost_€'))
-                .join(gen_list.overnight_cost.groupby(gen_list.carrier).mean().rename('overnight_cost_€'))
                 .join(gen_list.expansion_cost_EUR.groupby(gen_list.carrier).sum())
                 .join((gen_list.energy_2045_MWh.groupby(n.generators.carrier).sum()))
                 .join(gen_list.full_load_hours_h.groupby(n.generators.carrier).sum())
@@ -314,15 +317,16 @@ def get_ac_data(n):
            ).fillna(0.0))
 
     list_lines = (n.lines.bus0.to_frame('bus0')
-              .join(n.lines[["bus1", "s_nom", "s_nom_opt", "capital_cost", "overnight_cost", "length"]])
+              .join(n.lines[["bus1", "s_nom", "s_nom_opt", "capital_cost", "length"]])
               .join(loading_max.rename('max_loading'))
               .join(loading_mean.rename('mean_loading'))
               .join((n.lines.s_nom_opt - n.lines.s_nom).rename('expansion_mw'))
               .join((n.lines.overnight_cost * (n.lines.s_nom_opt - n.lines.s_nom)).rename('expansion_cost_EUR'))
               .join((n.lines_t.loss.sum()).rename('loss_mwh'))
         )
-    list_lines=list_lines.join(((list_lines.expansion_cost_EUR.sort_values(ascending=False) / list_lines.expansion_cost_EUR.sum()) * 100).rename('pc_expensions_cost')) # pc-Kosten des Ausbaus
+    # list_lines=list_lines.join(((list_lines.expansion_cost_EUR.sort_values(ascending=False) / list_lines.expansion_cost_EUR.sum()) * 100).rename('pc_expensions_cost')) # pc-Kosten des Ausbaus
     return list_lines
+# ========= DC-Daten =========
 def get_dc_data(n):
     loading_max = n.links_t.p1.abs().sort_index().max() / (n.links.p_nom_opt * n.links.p_max_pu).sort_index()
     loading_mean = n.links_t.p1.abs().sort_index().mean() / (n.links.p_nom_opt * n.links.p_max_pu).sort_index()
@@ -332,11 +336,10 @@ def get_dc_data(n):
             .join(loading_max.rename('max_loading'))
             .join(loading_mean.rename('mean_loading'))
             .join(((n.links['p_nom_opt'] - n.links['p_nom'])).rename('expansion_mw'))
-            .join(n.links[["overnight_cost"]])
     )
-    list_links = list_links.join((list_links.overnight_cost.sort_values(ascending=False) * list_links.expansion_mw.sort_values(ascending=False)).rename('expansion_cost_EUR')) # Kosten des Ausbaus
+    list_links = list_links.join((list_links.capital_cost.sort_values(ascending=False) * list_links.expansion_mw.sort_values(ascending=False)).rename('expansion_cost_EUR')) # Kosten des Ausbaus
     list_dc = list_links.loc[list_links['carrier'] == 'DC']
-    list_dc = list_dc.join(((list_dc.expansion_cost_EUR.sort_values(ascending=False) / list_dc.expansion_cost_EUR.sum()) * 100).rename('pc_expensions_cost')) # pc-Kosten des Ausbaus (Nur DC-Leitungen)
+    # list_dc = list_dc.join(((list_dc.expansion_cost_EUR.sort_values(ascending=False) / list_dc.expansion_cost_EUR.sum()) * 100).rename('pc_expensions_cost')) # pc-Kosten des Ausbaus (Nur DC-Leitungen)
     return list_dc
 # ========= Leitungs-Filter Basisnetz und NEP (AC & DC) =========
 def filter_connections(network_connection_raw, nep_connection_raw):
@@ -352,12 +355,52 @@ def get_real_expansion_data(nep_connections_in_network, type):
         nep_connections_in_network['expansion_mw'] = nep_connections_in_network.p_nom_opt
         nep_connections_in_network['expansion_cost_EUR'] = nep_connections_in_network.p_nom_opt * nep_connections_in_network.capital_cost
     return nep_connections_in_network
+# ========= Basisnetz & NEP-Projekte zusammenführen =========
+def two_to_one(list_1, list_2):
+    if (list_1.index.intersection(list_2.index)).empty:
+        list = pd.concat(
+            [list_1, list_2],
+            axis=0 # 0 --> Spalten werden zusammengeführt, 1 --> Zeilen werden drunter gehängt und Spalten werden neu geschrieben
+        )
+    else: print('Listen können nicht zusammengführt werden!')
+    return list
+# ========= Netzwerkkennzahlen ins Dic mit aufnehmen =========
+def multiple_to_run_dic(run_dic, component, list): # component: Generator, AC-Leitungen (Basisnetz), AC-Leitung (NEP), DC-Leitungen (Basisnetz), DC-Leitung (NEP)
+    if component == 'Generator':
+        to_run_dic(run_dic,  'Investitionskosten [€]', 'Generator', list.expansion_cost_EUR.sum())
+        to_run_dic(run_dic, 'Ausgebaute Leistung [MW]', 'Generator', list.expansion_mw.sum())
+        to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'Generator', (list.energy_2045_MWh.sum()))
+        to_run_dic(run_dic, 'Anzahl [N]', 'Generator', len(list.index))
+    elif component == 'AC-Leitungen (Basisnetzwerk)':
+        # AC-Leitungen die im Base-Netz waren (base_network)
+        to_run_dic(run_dic, 'Investitionskosten [€]', 'AC-Leitungen (Basisnetzwerk)', list.expansion_cost_EUR.sum())
+        to_run_dic(run_dic, 'Ausgebaute Leistung [MW]', 'AC-Leitungen (Basisnetzwerk)', list.expansion_mw.sum())
+        to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'AC-Leitungen (Basisnetzwerk)', (list.loss_mwh.sum()*-1))
+        to_run_dic(run_dic, 'Anzahl [N]', 'AC-Leitungen (Basisnetzwerk)', len(list.index))
+    elif component == 'AC-Leitungen (NEP)':
+         # AC-Leitungen, die durch NEP hinzugefügt wurden (add_transmission_projects_and_dir & simplify_network)
+        to_run_dic(run_dic, 'Investitionskosten [€]', 'AC-Leitungen (NEP)', list.expansion_cost_EUR.sum())
+        to_run_dic(run_dic, 'Ausgebaute Leistung [MW]', 'AC-Leitungen (NEP)', list.expansion_mw.sum()) #expansion_mw.sum())
+        to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'AC-Leitungen (NEP)', (list.loss_mwh.sum()*-1))
+        to_run_dic(run_dic, 'Anzahl [N]', 'AC-Leitungen (NEP)', len(list.index))
+    elif component == 'DC-Leitungen (Basisnetzwerk)':
+        # DC-Leitungen die im Base-Netz waren (base_network)
+        to_run_dic(run_dic, 'Investitionskosten [€]', 'DC-Leitungen (Basisnetzwerk)', list.expansion_cost_EUR.sum())
+        to_run_dic(run_dic, 'Ausgebaute Leistung [MW]', 'DC-Leitungen (Basisnetzwerk)', list.expansion_mw.sum())
+        to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'DC-Leitungen (Basisnetzwerk)', 'loss = |p0| * (1-η), efficiency = η = 1 <-> loss = 0') #\text{loss} = |p0| \cdot (1-\eta)
+        to_run_dic(run_dic, 'Anzahl [N]', 'DC-Leitungen (Basisnetzwerk)', len(list.index))
+    elif component == 'DC-Leitungen (NEP)':
+        # DC-Leitungen, die durch NEP hinzugefügt wurden (add_transmission_projects_and_dir & simplify_network)
+        to_run_dic(run_dic, 'Investitionskosten [€]', 'DC-Leitungen (NEP)', list.expansion_cost_EUR.sum())
+        to_run_dic(run_dic, 'Ausgebaute Leistung [MW]', 'DC-Leitungen (NEP)', list.expansion_mw.sum()) #expansion_mw.sum())
+        to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'DC-Leitungen (NEP)', 'loss = |p0| * (1-η), efficiency = η = 1 <-> loss = 0')
+        to_run_dic(run_dic, 'Anzahl [N]', 'DC-Leitungen (NEP)', len(list.index))
 # ============================================== MAIN ==============================================
 def main():
     # ===== PFAD =====
-    path_row = input("Bitte vollständigen Pfad zur .nc-Datei eingeben:\n> ").strip()
-    path_in = Path(path_row)
-    # path_in = Path(r"C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\BA_2037_DC_N_S\KN2045_Elek\networks\base_s_all_elec_.nc") # Auskommentieren, wenn fertig
+    # path_row = input("Bitte vollständigen Pfad zur .nc-Datei eingeben:\n> ").strip()
+    # # path_in = Path(path_row)
+    path_in = Path(r"C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\BA_Referenzoptimierung\KN2045_Elek\networks\base_s_all_elec_.nc") # Auskommentieren, wenn fertig
     # ===== Netzwerk einlesen =====
     n = read_network(path_in)
     # ===== Ablageordner erstellen =====
@@ -373,20 +416,12 @@ def main():
     merit_order(n, gen_list, path_out)
     data_cake = gen_carrier_list.groupby(carrier_key()).sum().energy_2045_MWh
     make_cake_dia(n, data_cake, path_out, 'Energieerzeugung')
-    to_run_dic(run_dic,  'Investitionskosten [€]', 'Generator', gen_list['expansion_cost_EUR'].sum())
-    to_run_dic(run_dic, 'Ausgebaute Leistung [MW]', 'Generator', gen_list.expansion_mw.sum())
-    to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'Generator', (gen_list.energy_2045_MWh.sum()))
-    to_run_dic(run_dic, 'Anzahl [N]', 'Generator', len(gen_list.index))
+    multiple_to_run_dic(run_dic, 'Generator', gen_list)
     # ===== Lasten =====
     to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'Last', (n.loads_t.p.sum().sum()*-1))
     # ===== Diagram zur Wahl des Zeitausschnitts =====
     data_pos_load, data_neg_load = data_for_time_plot(n)
-    time_plot_n_axses(n, data_pos_load, path_out, file_title='Einspeisung_Wind_Last_2045', time_period='2045') # 2045
-    time_plot_n_axses(n, data_pos_load.loc['2013-12'], path_out, file_title='Einspeisung_Wind_Last_12_2045', time_period=('12-2045'))
-    time_plot_n_axses(n, data_pos_load.loc['2013-12-02':'2013-12-09'], path_out, 'Einspeisung_Wind_Last_Woche_12_2045', ('02-12 bis 09-12-2045'))
-    time_plot_n_axses(n, data_pos_load.loc['2013-12-06 00:00:00' : '2013-12-06 23:59:00'], path_out, 'Einspeisung_Wind_Last_06_12_2045', ('06-12-2045'))
-    time_plot_n_axses(n, data_pos_load.loc['2013-12-05 00:00:00' : '2013-12-05 23:59:00'], path_out, 'Einspeisung_Wind_Last_05_12_2045', ('05-12-2045'))
-    time_plot_n_axses(n, data_pos_load.loc['2013-12-05 15:00:00' : '2013-12-05 18:00:00'], path_out, 'Einspeisung_Wind_Last_05_12_2045', ('15-18-05-12-2045'))
+    # time_plot_n_axses(n, data_pos_load, path_out, file_title='Einspeisung_Wind_Last_2045', time_period='2045') # 2045
     # time_plot_1_axes(n, data_neg_load, path_out, file_title='Last_vs_Wind')
     # data.loc["2013-01-01":"2013-01-31"]
     # data.loc["2013-01-01 00:00:00":"2013-01-01 09:00:00"]
@@ -395,33 +430,19 @@ def main():
     # ===== AC-Leitungen =====
     ac_lines = get_ac_data(n)
     ac_nep_lines=get_csv(r'C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\data\transmission_projects\nep\new_lines.csv')
-    ac_base_network, ac_transmission_projects_nep = filter_connections(ac_lines, ac_nep_lines) # Gibt die verbauten Connections im Netzwerk aufgeteilt nach Roh- & NEP-Netzwerk zurück
-    # AC-Leitungen die im Base-Netz waren (base_network)
-    to_run_dic(run_dic, 'Investitionskosten [€]', 'AC-Leitungen (Basisnetzwerk)', ac_base_network.expansion_cost_EUR.sum())
-    to_run_dic(run_dic, 'Ausgebaute Leistung [MW]', 'AC-Leitungen (Basisnetzwerk)', ac_base_network.expansion_mw.sum())
-    to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'AC-Leitungen (Basisnetzwerk)', (ac_base_network.loss_mwh.sum()*-1))
-    to_run_dic(run_dic, 'Anzahl [N]', 'AC-Leitungen (Basisnetzwerk)', len(ac_base_network.index))
-    # AC-Leitungen, die durch NEP hinzugefügt wurden (add_transmission_projects_and_dir & simplify_network)
+    ac_basenetwork, ac_transmission_projects_nep = filter_connections(ac_lines, ac_nep_lines) # Gibt die verbauten Connections im Netzwerk aufgeteilt nach Roh- & NEP-Netzwerk zurück
     ac_transmission_projects_nep = get_real_expansion_data(ac_transmission_projects_nep, 'AC') # Neurechnen des Ausbau und Kosten für NEP-Projekte
-    to_run_dic(run_dic, 'Investitionskosten [€]', 'AC-Leitungen (NEP)', ac_transmission_projects_nep.expansion_cost_EUR.sum())
-    to_run_dic(run_dic, 'Ausgebaute Leistung [MW]', 'AC-Leitungen (NEP)', ac_transmission_projects_nep.expansion_mw.sum()) #expansion_mw.sum())
-    to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'AC-Leitungen (NEP)', (ac_transmission_projects_nep.loss_mwh.sum()*-1))
-    to_run_dic(run_dic, 'Anzahl [N]', 'AC-Leitungen (NEP)', len(ac_transmission_projects_nep.index))
+    multiple_to_run_dic(run_dic, 'AC-Leitungen (Basisnetzwerk)', ac_basenetwork)
+    multiple_to_run_dic(run_dic, 'AC-Leitungen (NEP)', ac_transmission_projects_nep)
+    ac_lines = two_to_one(ac_basenetwork, ac_transmission_projects_nep)
     # ===== DC-Leitungen =====
     dc_links = get_dc_data(n)
     links_nep=get_csv(r'C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\data\transmission_projects\nep\new_links.csv')
     dc_basenetwork, dc_transmission_projects_nep = filter_connections(dc_links, links_nep)
-    # DC-Leitungen die im Base-Netz waren (base_network)
-    to_run_dic(run_dic, 'Investitionskosten [€]', 'DC-Leitungen (Basisnetzwerk)', dc_basenetwork.expansion_cost_EUR.sum())
-    to_run_dic(run_dic, 'Ausgebaute Leistung [MW]', 'DC-Leitungen (Basisnetzwerk)', dc_basenetwork.expansion_mw.sum())
-    # to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'DC-Leitungen (Basisnetzwerk)', (dc_in_network.loss_mwh.sum()*-1))
-    to_run_dic(run_dic, 'Anzahl [N]', 'DC-Leitungen (Basisnetzwerk)', len(dc_basenetwork.index))
-    # DC-Leitungen, die durch NEP hinzugefügt wurden (add_transmission_projects_and_dir & simplify_network)
-    ac_transmission_projects_nep = get_real_expansion_data(dc_transmission_projects_nep, 'DC') # Neurechnen des Ausbau und Kosten für NEP-Projekte
-    to_run_dic(run_dic, 'Investitionskosten [€]', 'DC-Leitungen (NEP)', dc_transmission_projects_nep.expansion_cost_EUR.sum())
-    to_run_dic(run_dic, 'Ausgebaute Leistung [MW]', 'DC-Leitungen (NEP)', dc_transmission_projects_nep.expansion_mw.sum()) #expansion_mw.sum())
-    # to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'DC-Leitungen (NEP)', (dc_nep_in_network.loss_mwh.sum()*-1))
-    to_run_dic(run_dic, 'Anzahl [N]', 'DC-Leitungen (NEP)', len(dc_transmission_projects_nep.index))
+    dc_transmission_projects_nep = get_real_expansion_data(dc_transmission_projects_nep, 'DC') # Neurechnen des Ausbau und Kosten für NEP-Projekte
+    multiple_to_run_dic(run_dic, 'DC-Leitungen (Basisnetzwerk)', dc_basenetwork)
+    multiple_to_run_dic(run_dic, 'DC-Leitungen (NEP)', dc_transmission_projects_nep)
+    dc_links = two_to_one(dc_basenetwork, dc_transmission_projects_nep)
 
 
 
