@@ -116,11 +116,6 @@ transmission_projects:
     #- planned_not_yet_permitted
     #- under_consideration
   new_link_capacity: keep #________________________________ keep #keep or zero # config.default: zero, config.de: keep
-#===============snapshots==============
-snapshots:
-  start: '2019-01-01'
-  end: '2020-01-01'
-  inclusive: left
 #===============Cost==============
 # Kostenjahr wurde entsprechend eingestellt.
 costs:
