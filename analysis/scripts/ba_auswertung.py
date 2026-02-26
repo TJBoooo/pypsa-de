@@ -53,11 +53,105 @@ def get_metadata(n, path, path_in):
     overview = pd.DataFrame(rows)  # Array in Dataframe überführen
     overview.to_csv(path / f'Metadaten_{prefix}.csv', index = False)
 # =========================== Allgemeiner erster Plot ===========================
-def plot_network(n, path_out):
-    fig, ax = plt.subplots(subplot_kw={"projection": ccrs.PlateCarree()}, figsize=(10, 8))
-    fig.suptitle(f"{n.meta['run']['prefix']} | Cluster: {n.meta['scenario']['clusters'][0]} | N-Knoten: {len(n.buses.index)}", fontsize=12, fontweight="bold")
-    n.plot(ax=ax,geomap_color=True,bus_size=0.001)
-    fig.savefig(path_out / f'Karte_allgemein_{n.meta['run']['prefix']}.svg', bbox_inches="tight")
+def make_plot(
+    n,
+    title,
+    path_out=None,
+    pc_title=None,
+    line_color=None,
+    line_width=None,
+    link_color=None,
+    link_width=None,
+    *,
+    scale_width=0.0008,
+    min_width=3,
+    vmin=0,
+    vmax=100,
+    cmap=plt.cm.RdYlGn_r,
+    norm=None,
+    show_colorbar=True,
+    line_style="-",
+    link_style="--",          
+    link_capstyle="round",   
+):
+    if norm is None:
+        norm = mpl.colors.Normalize(vmin, vmax)
+
+    fig, ax = plt.subplots(
+        subplot_kw={"projection": ccrs.PlateCarree()},
+        figsize=(20, 20)
+    )
+
+    plot_kwargs = dict(
+        ax=ax,
+        branch_components=["Line", "Link"],
+        line_widths=min_width,
+        link_widths=min_width,
+        bus_size=0.001,
+        geomap=True,
+        geomap_color={"ocean": "lightblue", "land": "#E6E7D8F9"},
+    )
+
+    # ---- Optional Line Settings ----
+    if line_color is not None:
+        plot_kwargs.update(
+            line_colors=(line_color * 100),
+            line_cmap=cmap,
+            line_cmap_norm=norm,
+        )
+
+    if line_width is not None:
+        plot_kwargs.update(
+            line_widths=(line_width * scale_width + min_width),
+        )
+
+    # ---- Optional Link Settings ----
+    if link_color is not None:
+        plot_kwargs.update(
+            link_colors=(link_color * 100),
+            link_cmap=cmap,
+            link_cmap_norm=norm,
+        )
+
+    if link_width is not None:
+        plot_kwargs.update(
+            link_widths=(link_width * scale_width + min_width),
+        )
+
+    # ---- Plot ----
+    coll = n.plot(**plot_kwargs)
+
+    # ---- Styling nachträglich ----
+    if "Line" in coll.get("branches", {}):
+        line_coll = coll["branches"]["Line"]
+        line_coll.set_linestyle(line_style)
+        line_coll.set_capstyle(line_capstyle)
+
+    if "Link" in coll.get("branches", {}):
+        link_coll = coll["branches"]["Link"]
+        link_coll.set_linestyle(link_style)
+        link_coll.set_capstyle(link_capstyle)
+
+    # ---- Colorbar ----
+    if show_colorbar and (line_color is not None or link_color is not None):
+        if pc_title is None:
+            pc_title = "?!?!?!"
+
+        sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+        cbar = fig.colorbar(sm, ax=ax, fraction=0.04, pad=0.05)
+        cbar.set_label(f"{pc_title}", fontsize=20)
+        cbar.ax.tick_params(labelsize=18)
+
+    ax.set_title(
+        f"{title} | {n.meta['run']['prefix']}",
+        fontsize=18,
+        fontweight="bold"
+    )
+
+    ax.axis("off")
+
+    fig.savefig(path_out/f'{title}_{n.meta['run']['prefix']}.svg', bbox_inches="tight")
     plt.close(fig)
 # ========= Erzeugen, der Netzwerkkomponenten =========
 def network_components(n, path_out):
@@ -142,13 +236,13 @@ def time_plot_n_axses(n, data_plot, path_out, file_title, time_period): # nrows 
     fig.savefig(path_out / f'{file_title}_{n.meta['run']['prefix']}.svg', bbox_inches="tight")
     plt.close(fig)
 # ========= Time-Plot (1-Achse) =========
-def time_plot_1_axes(n, data_plot, path_out, file_title):
+def time_plot_1_axes(n, data_plot, path_out, file_title, time_period):
 
     # Farbmap holen (dict: name -> hex)
     colors = [color_key(n).get(col, '#999999') for col in data_plot.columns]
     linewidth = 0.8
     fig, ax = plt.subplots(figsize=(18, 6))
-    fig.suptitle(f"Zeitverlauf: {n.meta['run']['prefix']}", fontsize=22)
+    fig.suptitle(f"{n.meta['run']['prefix']}\nZeitverlauf: {time_period}", fontsize=22)
     data_plot.plot(ax=ax, color=colors, linewidth=linewidth)
 
     ax.set_ylabel("MW")
@@ -289,12 +383,14 @@ def data_for_time_plot(n):
     carrier_time = n.generators_t.p.T.groupby(n.generators.carrier).sum().groupby(carrier_key()).sum().T.copy()
     data_pos_load = (
         (n.loads_t.p.T.sum() * 1).to_frame('Gesamtlast')
-            .join(((carrier_time.Wind)))
+            .join(((carrier_time.Onwind)))
+            .join(((carrier_time.Offwind)))
             .join((carrier_time.T.sum().T).rename('Generatoreinspeisung'))
             )
     data_neg_load = (
         (n.loads_t.p.T.sum() * -1).to_frame('Gesamtlast')
-            .join(((carrier_time.Wind).rename('Windeinspeisung')))
+            .join(((carrier_time.Onwind).rename('Onwindeinspeisung')))
+            .join(((carrier_time.Offwind).rename('Offwindeinspeisung')))
             .join((carrier_time.T.sum().T).rename('Generatoreinspeisung'))
             )
     return data_pos_load, data_neg_load
@@ -319,7 +415,7 @@ def get_ac_data(n):
 
     list_lines = (n.lines.bus0.to_frame('bus0')
               .join(n.lines[["bus1", "s_nom", "s_nom_opt", "capital_cost", "length"]])
-              .join(loading_max.rename('max_loading'))
+            #   .join(loading_max.rename('max_loading'))
               .join(loading_mean.rename('mean_loading'))
               .join((n.lines.s_nom_opt - n.lines.s_nom).rename('expansion_mw'))
               .join((n.lines.overnight_cost * (n.lines.s_nom_opt - n.lines.s_nom)).rename('expansion_cost_EUR'))
@@ -334,7 +430,7 @@ def get_dc_data(n):
     list_links = (
             n.links.bus0.to_frame('bus0')
             .join(n.links[["bus1", "carrier", "p_nom" ,"p_nom_opt","capital_cost"]])
-            .join(loading_max.rename('max_loading'))
+            # .join(loading_max.rename('max_loading'))
             .join(loading_mean.rename('mean_loading'))
             .join(((n.links['p_nom_opt'] - n.links['p_nom'])).rename('expansion_mw'))
     )
@@ -348,13 +444,15 @@ def filter_connections(network_connection_raw, nep_connection_raw):
     connections_in_network = network_connection_raw.drop(nep_connections_in_network.index)
     return connections_in_network, nep_connections_in_network
 # ========= Neuberechnung der Ausgebauten Leistung & entstandenen Kosten Basisnetz und NEP (AC & DC) =========
-def get_real_expansion_data(nep_connections_in_network, type):
+def make_real_expansion_data(nep_connections_in_network, type):
     if type == 'AC':
         nep_connections_in_network['expansion_mw'] = nep_connections_in_network.s_nom_opt
         nep_connections_in_network['expansion_cost_EUR'] = nep_connections_in_network.s_nom_opt * nep_connections_in_network.capital_cost
+        nep_connections_in_network['s_nom'] = 0
     if type =='DC':
         nep_connections_in_network['expansion_mw'] = nep_connections_in_network.p_nom_opt
         nep_connections_in_network['expansion_cost_EUR'] = nep_connections_in_network.p_nom_opt * nep_connections_in_network.capital_cost
+        nep_connections_in_network['p_nom'] = 0
     return nep_connections_in_network
 # ========= Basisnetz & NEP-Projekte zusammenführen =========
 def two_to_one(list_1, list_2):
@@ -399,16 +497,15 @@ def multiple_to_run_dic(run_dic, component, list): # component: Generator, AC-Le
 # ============================================== MAIN ==============================================
 def main():
     # ===== PFAD =====
-    path_row = input("Bitte vollständigen Pfad zur .nc-Datei eingeben:\n> ").strip()
-    path_in = Path(path_row)
-    # path_in = Path(r"C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\BA_Referenzoptimierung\KN2045_Elek\networks\base_s_all_elec_.nc") # Auskommentieren, wenn fertig
+    # path_row = input("Bitte vollständigen Pfad zur .nc-Datei eingeben:\n> ").strip()
+    # path_in = Path(path_row)
+    path_in = Path(r"C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\1_BA_Referenzoptimierung\KN2045_Elek\networks\base_s_all_elec_.nc") # Auskommentieren, wenn fertig
     # ===== Netzwerk einlesen =====
     n = read_network(path_in)
     # ===== Ablageordner erstellen =====
     path_out = build_folder(n, 'analysis_final', path_in)
     # ===== Netzwerkdaten =====
     get_metadata(n, path_out, path_in)
-    plot_network(n, path_out)
     network_components(n, path_out)
     # ===== Diconary für RUN anlegen =====
     run_dic = {}
@@ -421,32 +518,88 @@ def main():
     # ===== Lasten =====
     to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'Last', (n.loads_t.p.sum().sum()*-1))
     # ===== Diagram zur Wahl des Zeitausschnitts =====
-    data_pos_load, data_neg_load = data_for_time_plot(n)
-    # time_plot_n_axses(n, data_pos_load, path_out, file_title='Einspeisung_Wind_Last_2045', time_period='2045') # 2045
-    # time_plot_1_axes(n, data_neg_load, path_out, file_title='Last_vs_Wind')
-    # data.loc["2013-01-01":"2013-01-31"]
-    # data.loc["2013-01-01 00:00:00":"2013-01-01 09:00:00"]
-    # data.loc[pd.Timestamp("2013-01-01 13:00")]
-    # data.resample('D').mean()
+    data_pos_load, data_neg_load = data_for_time_plot(n) #Spezieller Plot, um Zeitpunkt des Netzengpasses zu bestimmen.
+    time_plot_n_axses(n, data_pos_load.resample('D').mean(), path_out, file_title='Jahresüberblick', time_period='2045') # 2045
+    # time_plot_n_axses(n, data_pos_load.loc['2013-12-04':'2013-12-06'], path_out, file_title='Einspeisung_Wind_Last_2045_2', time_period='04-12-2045 bis 06-12-2045')
+    time_plot_n_axses(n, data_pos_load.loc['2013-12-05 09:00:00':'2013-12-05 13:00:00'], path_out, file_title='Ausschnitt Jahreshöchstleistung', time_period='05-12-2045') # 2045
+    # time_plot_1_axes(n, data_neg_load.loc['2013-12-05 09:00:00':'2013-12-05 13:00:00'], path_out, file_title='Einspeisung_Wind_Last_2045_4')
     # ===== AC-Leitungen =====
-    ac_lines = get_ac_data(n)
+    ac_lines_raw = get_ac_data(n)
     ac_nep_lines=get_csv(r'C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\data\transmission_projects\nep\new_lines.csv')
-    ac_basenetwork, ac_transmission_projects_nep = filter_connections(ac_lines, ac_nep_lines) # Gibt die verbauten Connections im Netzwerk aufgeteilt nach Roh- & NEP-Netzwerk zurück
-    ac_transmission_projects_nep = get_real_expansion_data(ac_transmission_projects_nep, 'AC') # Neurechnen des Ausbau und Kosten für NEP-Projekte
+    ac_basenetwork, ac_transmission_projects_nep = filter_connections(ac_lines_raw, ac_nep_lines) # Gibt die verbauten Connections im Netzwerk aufgeteilt nach Roh- & NEP-Netzwerk zurück
+    ac_transmission_projects_nep = make_real_expansion_data(ac_transmission_projects_nep, 'AC') # Neurechnen des Ausbau und Kosten für NEP-Projekte
     multiple_to_run_dic(run_dic, 'AC-Leitungen (Basisnetzwerk)', ac_basenetwork)
     multiple_to_run_dic(run_dic, 'AC-Leitungen (NEP)', ac_transmission_projects_nep)
-    ac_lines = two_to_one(ac_basenetwork, ac_transmission_projects_nep)
+    ac_lines = two_to_one(ac_basenetwork, ac_transmission_projects_nep) # Übersicht zum Speichern
     # ===== DC-Leitungen =====
-    dc_links = get_dc_data(n)
+    dc_links_raw = get_dc_data(n)
     links_nep=get_csv(r'C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\data\transmission_projects\nep\new_links.csv')
-    dc_basenetwork, dc_transmission_projects_nep = filter_connections(dc_links, links_nep)
-    dc_transmission_projects_nep = get_real_expansion_data(dc_transmission_projects_nep, 'DC') # Neurechnen des Ausbau und Kosten für NEP-Projekte
+    dc_basenetwork, dc_transmission_projects_nep = filter_connections(dc_links_raw, links_nep)
+    dc_transmission_projects_nep = make_real_expansion_data(dc_transmission_projects_nep, 'DC') # Neurechnen des Ausbau und Kosten für NEP-Projekte
     multiple_to_run_dic(run_dic, 'DC-Leitungen (Basisnetzwerk)', dc_basenetwork)
     multiple_to_run_dic(run_dic, 'DC-Leitungen (NEP)', dc_transmission_projects_nep)
-    dc_links = two_to_one(dc_basenetwork, dc_transmission_projects_nep)
+    dc_links = two_to_one(dc_basenetwork, dc_transmission_projects_nep) # Übersicht zum Speichern
+    # ===== Plots =====
+    # make_plot(
+    #     n,
+    #     title,
+    #     path_out=None,
+    #     pc_title=None,
+    #     line_color=None,
+    #     line_width=None,
+    #     link_color=None,
+    #     link_width=None,
+    #     *,
+    #     scale_width=0.0008,
+    #     min_width=1,
+    #     cmap=plt.cm.RdYlGn_r,
+    #     norm=None,
+    #     show_colorbar=True,
+    #     line_style="-",          
+    #     link_style="-",          
+    #     line_capstyle="round",  
+    #     link_capstyle="round",   
+    # )
+    make_plot(n, 'Erster Überblick', path_out=path_out)
+    make_plot(n, 'Normalbetrieb (Mittelwert 2045)', path_out=path_out,
+            pc_title='Farbe: Auslastung [%], Breite: Installierte Leistung',  # (100 %: Zulässig installierte Leistung)
+            line_color=ac_lines.mean_loading, 
+            line_width=ac_lines.s_nom_opt, 
+            link_color=dc_links.mean_loading, 
+            link_width=dc_links.p_nom_opt
+            )
+    make_plot(n, 'Ausbau durch Solver', path_out=path_out,
+            pc_title='Farbe: Ausbau [%] (Basis: ursprünglich installierte Leistung) ', 
+            line_color= (ac_lines_raw.expansion_mw / ac_lines_raw.s_nom),
+            link_color= (dc_links_raw.expansion_mw / dc_links_raw.p_nom)
+            )
+    
+    ac_basenetwork_copy = ac_basenetwork.copy()
+    ac_basenetwork_copy['expansion_mw'] = 0
 
+    ac_transmission_projects_nep_copy = ac_transmission_projects_nep.copy()
+    ac_transmission_projects_nep['s_nom'] = 1
 
+    dc_basenetwork_copy = dc_basenetwork.copy()
+    dc_basenetwork_copy['expansion_mw'] = 0
 
+    dc_transmission_projects_nep_copy = dc_transmission_projects_nep.copy()
+    dc_transmission_projects_nep_copy['p_nom'] = 1
+    ac_nep_plot = two_to_one(ac_basenetwork_copy, ac_transmission_projects_nep_copy)
+    dc_nep_plot = two_to_one(dc_basenetwork_copy, dc_transmission_projects_nep_copy)
+    make_plot(n, 'Ausbau-NEP', path_out=path_out,
+          line_color=ac_nep_plot.expansion_mw / ac_nep_plot.s_nom,
+          link_color=dc_nep_plot.expansion_mw / dc_nep_plot.p_nom,
+          pc_title='Farbe: Ausbau durch NEP-Projekte [%] (Basis: ursprünglich installierte Leistung), '
+          )
+    make_plot(n, 'Gesamtausbau (Solver & NEP)', path_out=path_out,
+          line_color=ac_lines.expansion_mw/ac_lines.s_nom,
+          line_width=ac_lines.expansion_cost_EUR/(ac_lines.expansion_cost_EUR.sum()+dc_links.expansion_cost_EUR.sum()),
+          link_color=dc_links.expansion_mw/dc_links.p_nom,
+          link_width=dc_links.expansion_cost_EUR/(ac_lines.expansion_cost_EUR.sum()+dc_links.expansion_cost_EUR.sum()),
+          scale_width=60,
+          pc_title='Farbe: Ausbau [%] (Basis: ursprünglich installierte Leistung), \nBreite: Investition [%] (Basis: GEsamtinvestition)'
+          )
 
 
 
