@@ -72,6 +72,7 @@ def make_plot(
     show_colorbar=True,
     line_style="-",
     link_style="--",          
+    line_capstyle="round",   
     link_capstyle="round",   
 ):
     if norm is None:
