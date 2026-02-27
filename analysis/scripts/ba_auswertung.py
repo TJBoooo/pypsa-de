@@ -52,7 +52,7 @@ def get_metadata(n, path, path_in):
         ]
     overview = pd.DataFrame(rows)  # Array in Dataframe überführen
     overview.to_csv(path / f'Metadaten_{prefix}.csv', index = False)
-# =========================== Allgemeiner erster Plot ===========================
+# =========================== Allgemeiner Plot (ChatGPT) ===========================
 def make_plot(
     n,
     title,
@@ -220,7 +220,7 @@ def color_key(n):
     }
     return energy_colors
 # ========= Time-Plot (N-Achsen) =========
-def time_plot_n_axses(n, data_plot, path_out, file_title, time_period): # nrows !> 1
+def time_plot_n_axses(n, data_plot, path_out, file_title, time_period, y_lable='MW'): # nrows !> 1
     n_rows = int(data_plot.columns.value_counts().sum())
     colors = [color_key(n).get(col, '#999999') for col in data_plot.columns]
     linewidth = 0.8 
@@ -235,7 +235,7 @@ def time_plot_n_axses(n, data_plot, path_out, file_title, time_period): # nrows 
 
     for i in range(n_rows):
         data_plot.iloc[:,i:i+1].plot(ax=axes[i], color=[colors[i]], linewidth=linewidth, legend=False)
-        axes[i].set_ylabel("MW")
+        axes[i].set_ylabel(f"{y_lable}")
         axes[i].set_title(f"{data_plot.columns[i]}")
 
     fig.savefig(path_out / f'{file_title}_{n.meta['run']['prefix']}.svg', bbox_inches="tight")
@@ -284,7 +284,7 @@ def get_gen_data(n, path_out):
                 .join((gen_list.energy_2045_MWh.groupby(n.generators.carrier).sum()))
                 .join(gen_list.full_load_hours_h.groupby(n.generators.carrier).sum())
                 )
-    gen_carrier_list = gen_carrier_list.join((n.carriers["color"]).loc[gen_carrier_list.index])
+    # gen_carrier_list = gen_carrier_list.join((n.carriers["color"]).loc[gen_carrier_list.index])
     # gen_list.to_csv(path_out / f'Generatoren_{n.meta['run']['prefix']}.csv', index = True)
     # gen_carrier_list.to_csv(path_out / f'Generatortechnologien_{n.meta['run']['prefix']}.csv', index = True)
     return (gen_list, gen_carrier_list)
@@ -365,7 +365,7 @@ def merit_order(n, gen_list, path_out):
     fig.savefig(path_out / f'Meritorder_{n.meta['run']['prefix']}.svg', bbox_inches="tight")
     plt.close(fig)
 # ========= %-EE-Jahresenergie (Erzeugt) =========
-def make_cake_dia(n, data, path_out, title): #Wind in off und on unterteilen!
+def make_cake_dia(n, data, path_out, title, time_period='2045'): #Wind in off und on unterteilen!
     energy_pc = data / data.sum() # Prozente rechnen
 
     data = data.dropna()
@@ -383,7 +383,7 @@ def make_cake_dia(n, data, path_out, title): #Wind in off und on unterteilen!
         startangle=90,
         colors=colors
     ) 
-    plt.title(f"{title} {n.meta['scenario']['planning_horizons'][0]}\n{n.meta['run']['prefix']}\nGesamterzeugung: {data.sum() / 1e6:.1f} [TWh]")
+    plt.title(f"{title} {time_period}\n{n.meta['run']['prefix']}\nGesamterzeugung: {data.sum() / 1e6:.1f} [TWh]")
     plt.ylabel("")
     
     fig.savefig(path_out / f'{title}_{n.meta['run']['prefix']}.svg', bbox_inches="tight")
@@ -505,19 +505,140 @@ def multiple_to_run_dic(run_dic, component, list): # component: Generator, AC-Le
 # ========= Netzwerkkennzahlen ins Dic mit aufnehmen =========       
 def get_bus_data(n):
     list = (
-        ((n.buses_t.marginal_price.T.loc[n.buses.carrier == 'AC'].T).T.var()).resample('W').max().to_frame('varianz')
-        .join((n.buses_t.marginal_price.T.max()).resample('W').max().rename('max_price'))
-        .join((n.buses_t.marginal_price.T.min()).resample('W').min().rename('min_price'))
+        ((n.buses_t.marginal_price.T.loc[n.buses.carrier == 'AC'].T).T.var()).to_frame('varianz')
+        .join((n.buses_t.marginal_price.T.max()).rename('max_price'))
+        .join((n.buses_t.marginal_price.T.min()).rename('min_price'))
         )
-    list = list.join((list.max_price - list.min_price).resample('W').max().rename('divergenz_price'))
+    list = list.join((list.max_price - list.min_price).rename('divergenz_price'))
 
     return list
+# ========= Engpassrente (Chat GPT) ========= 
+def congestion_rent(n, use_abs=False):
+    """
+    Engpassrente ohne Snapshotgewichtung (1h je Snapshot angenommen).
+    - Lines: n.lines_t.p0
+    - Links: n.links_t.p0
+    - Preise: n.buses_t.marginal_price
+    Returns: dict mit total, ac_total, dc_total und optional je Branch.
+    """
+    price = n.buses_t.marginal_price  # index=snapshots, columns=buses
+
+    out = {}
+
+    # ---------- AC Lines ----------
+    if len(n.lines) > 0:
+        p0 = price.loc[:, n.lines.bus0.values].copy()
+        p1 = price.loc[:, n.lines.bus1.values].copy()
+        p0.columns = n.lines.index
+        p1.columns = n.lines.index
+
+        dP_lines = p1 - p0                              # €/MWh
+        f_lines  = n.lines_t.p0                         # MW (bus0 -> bus1)
+
+        rent_lines_t = dP_lines * f_lines               # €/h (bei 1h => € pro Snapshot)
+        if use_abs:
+            rent_lines_t = dP_lines.abs() * f_lines.abs()
+
+        out["ac_total_EUR"] = float(rent_lines_t.sum().sum())
+        out["ac_by_line_EUR"] = rent_lines_t.sum(axis=0)  # Sum über Zeit, je Leitung
+    else:
+        out["ac_total_EUR"] = 0.0
+        out["ac_by_line_EUR"] = pd.Series(dtype=float)
+
+    # ---------- DC Links ----------
+    if len(n.links) > 0:
+        p0 = price.loc[:, n.links.bus0.values].copy()
+        p1 = price.loc[:, n.links.bus1.values].copy()
+        p0.columns = n.links.index
+        p1.columns = n.links.index
+
+        dP_links = p1 - p0                              # €/MWh
+        f_links  = n.links_t.p0                         # MW (bus0 -> bus1)
+
+        rent_links_t = dP_links * f_links
+        if use_abs:
+            rent_links_t = dP_links.abs() * f_links.abs()
+
+        out["dc_total_EUR"] = float(rent_links_t.sum().sum())
+        out["dc_by_link_EUR"] = rent_links_t.sum(axis=0)
+    else:
+        out["dc_total_EUR"] = 0.0
+        out["dc_by_link_EUR"] = pd.Series(dtype=float)
+
+    out["total_EUR"] = out["ac_total_EUR"] + out["dc_total_EUR"]
+    return out
+# ========= Auslastungsstatistic (ChatGPT)=========
+import matplotlib.ticker as mtick
+def statistic_plot(n, title, data_serie, path_out):
+
+    data_pct = data_serie * 100
+    stats = data_pct.describe()
+
+    # Jede Verbindung zählt 1/N → relativer Anteil
+    weights = np.ones(len(data_pct)) / len(data_pct)
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+
+    # Histogramm (relativer Anteil)
+    ax.hist(
+        data_pct,
+        bins=50,
+        weights=weights,
+        color="#1f77b4",
+        edgecolor="white"
+    )
+
+    # Kennlinien
+    ax.axvline(stats['mean'], linestyle="--", label="Mean", color='red')
+    # ax.axvline(stats['50%'], linestyle="-", label="Median")
+    ax.axvline(stats['75%'], linestyle=":", label="75% Quantil", color='orange')
+    # ax.axvline(70, color="red", linewidth=2, label="70% Schwelle")
+
+    # Statistikbox
+    text = (
+        f"N = {int(stats['count'])}\n"
+        f"Mean = {stats['mean']:.2f}%\n"
+        f"Std = {stats['std']:.2f}\n"
+        f"Min = {stats['min']:.2f}%\n"
+        f"25% = {stats['25%']:.2f}%\n"
+        f"Median = {stats['50%']:.2f}%\n"
+        f"75% = {stats['75%']:.2f}%\n"
+        f"Max = {stats['max']:.2f}%"
+    )
+
+    ax.text(
+        0.98, 0.95, text,
+        transform=ax.transAxes,
+        verticalalignment='top',
+        horizontalalignment='right',
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.85)
+    )
+
+    # Achsenformatierung
+    ax.set_xlabel("Auslastung [%]")
+    ax.set_ylabel("Anteil der Verbindungen [%]")
+
+    # Y-Achse in Prozent darstellen
+    ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1))
+
+    ax.set_title(title)
+    ax.legend()
+    ax.grid(alpha=0.3)
+
+    fig.tight_layout()
+
+    fig.savefig(
+        path_out / f"Statistik_{title}_{n.meta['run']['prefix']}.svg",
+        bbox_inches="tight"
+    )
+
+    plt.close(fig)
 # ============================================== MAIN ==============================================
 def main():
     # ===== PFAD =====
-    # path_row = input("Bitte vollständigen Pfad zur .nc-Datei eingeben:\n> ").strip()
-    # path_in = Path(path_row)
-    path_in = Path(r"C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\1_BA_Referenzoptimierung\KN2045_Elek\networks\base_s_all_elec_.nc") # Auskommentieren, wenn fertig
+    path_row = input("Bitte vollständigen Pfad zur .nc-Datei eingeben:\n> ").strip()
+    path_in = Path(path_row)
+    # path_in = Path(r"C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\results\1_BA_Referenzoptimierung\KN2045_Elek\networks\base_s_all_elec_.nc") # Auskommentieren, wenn fertig
     # ===== Netzwerk einlesen =====
     n = read_network(path_in)
     # ===== Ablageordner erstellen =====
@@ -534,7 +655,7 @@ def main():
     make_cake_dia(n, data_cake, path_out, 'Energieerzeugung')
     multiple_to_run_dic(run_dic, 'Generator', gen_list)
     co2_2045 = calculate_co2_emission(n, gen_list)
-    to_run_dic(run_dic, 'CO2-Ausstoß [t-CO2 / Periode (2045)]', 'Generator', co2_2045)
+    to_run_dic(run_dic, 'CO2-Ausstoß [t / Periode] (2045)', 'Generator', co2_2045)
     # ===== Lasten =====
     to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'Last', (n.loads_t.p.sum().sum()*-1))
     # ===== Diagram zur Wahl des Zeitausschnitts =====
@@ -590,7 +711,8 @@ def main():
           pc_title='Farbe: Ausbau [%] (Basis: ursprünglich installierte Leistung), \nBreite: installierte Leistung'
           )
     # Auslastung im Netzengpass
-    ac_eng_pass_data = n.lines_t.p1.abs().loc['2013-12-05 10:00:00'] / (n.lines.s_nom_opt * n.lines.s_max_pu)
+    S = get_line_power(n)
+    ac_eng_pass_data = S.loc['2013-12-05 10:00:00'] / (n.lines.s_nom_opt * n.lines.s_max_pu) # get_line_power müsste eingebunden werden.
     dc_eng_pass_data = n.links_t.p1.abs().loc['2013-12-05 10:00:00'] / (n.links.p_nom_opt * n.links.p_max_pu)
     make_plot(n, 'Netzengpass_05-12-2045_10_00_Uhr', path_out=path_out,
             line_color=ac_eng_pass_data,
@@ -598,23 +720,36 @@ def main():
             )
     # ===== Preisanalyse (Engpassidentifikation) =====
     bus_list = get_bus_data(n)
-    time_plot_n_axses(n, bus_list, path_out, 'Preisübersicht [€ pro MW]', time_period="2045")
+    bottleneck_hours = (bus_list.divergenz_price > 0).sum()
+    to_run_dic(run_dic, 'Volllast- / Engpassstunden', 'Netz', bottleneck_hours)
+    bus_list_week = (bus_list.varianz.resample('W').max().to_frame('varianz')
+                 .join(bus_list.max_price.resample('W').max())
+                 .join(bus_list.min_price.resample('W').min())
+                 .join(bus_list.divergenz_price).resample('W').max()
+                 )
+    time_plot_n_axses(n, bus_list_week, path_out, 'marginal_price [€ pro MW]', time_period=f"2045 \nEngpassstunden: {bottleneck_hours} [h]", y_lable='[€/MW]')
+    shortage_pension = congestion_rent(n, use_abs=False)
+    to_run_dic(run_dic, 'Engpassrente [€]', 'AC (insgesamt)', shortage_pension["ac_total_EUR"])
+    to_run_dic(run_dic, 'Engpassrente [€]', 'DC (insgesamt)', shortage_pension["dc_total_EUR"])
+    to_run_dic(run_dic, 'Engpassrente [€]', 'Netz', shortage_pension["total_EUR"])
+    # ===== Statistic =====
+    data = two_to_one(loading_mean_ac, loading_mean_dc)
+    statistic_plot(n, 'Normalbetrieb alle Verbindungen (Mittelwert 2045)', data, path_out)
+    data = two_to_one(ac_eng_pass_data, dc_eng_pass_data.loc[dc_links.index])
+    statistic_plot(n, 'Netzengpass_05-12-2045_10_00_Uhr', data, path_out)
+    # ===== Kreisdiagramm NEtzengpass =====
+    data_cake = (n.generators_t.p.loc['2013-12-05 10:00:00'].groupby(n.generators.carrier).sum()).groupby(carrier_key()).sum() # Weil Snapshot 1h kein Umrechnen der Energiemenge
+    make_cake_dia(n, data_cake, path_out, 'Energiererzuegung Netzengpass', time_period='2013-12-05 10:00 Uhr')
+    # ===== Volllaststunden zum Dic =====
     
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    to_run_dic(run_dic, 'Volllast- / Engpassstunden', 'Generator', gen_list.full_load_hours_h.sum())
+    to_run_dic(run_dic, 'Volllast- / Engpassstunden', 'AC-Leitungen (Basisnetzwerk)', ((n.lines_t.p0.abs().sum()).loc[ac_basenetwork.index] / ac_basenetwork.s_nom_opt).sum())
+    to_run_dic(run_dic, 'Volllast- / Engpassstunden', 'AC-Leitungen (NEP)', ((n.lines_t.p0.abs().sum()).loc[ac_transmission_projects_nep.index] / ac_transmission_projects_nep.s_nom_opt).sum())
+    to_run_dic(run_dic, 'Volllast- / Engpassstunden', 'DC-Leitungen (Basisnetzwerk)', ((n.links_t.p0.abs().sum()).loc[dc_basenetwork.index] / dc_basenetwork.p_nom_opt).sum())
+    to_run_dic(run_dic, 'Volllast- / Engpassstunden', 'DC-Leitungen (NEP)', ((n.links_t.p0.abs().sum()).loc[dc_transmission_projects_nep.index] / dc_transmission_projects_nep.p_nom_opt).sum())
+    to_run_dic(run_dic, 'Volllast- / Engpassstunden', 'AC (insgesamt)', (((n.lines_t.p0.abs().sum()).loc[ac_basenetwork.index] / ac_basenetwork.s_nom_opt).sum()+((n.lines_t.p0.abs().sum()).loc[ac_transmission_projects_nep.index] / ac_transmission_projects_nep.s_nom_opt).sum()))
+    to_run_dic(run_dic, 'Volllast- / Engpassstunden', 'DC (insgesamt)', (((n.links_t.p0.abs().sum()).loc[dc_basenetwork.index] / dc_basenetwork.p_nom_opt).sum()+((n.links_t.p0.abs().sum()).loc[dc_transmission_projects_nep.index] / dc_transmission_projects_nep.p_nom_opt).sum()))     
+    
     # ===== Diconary für Energy speichern =====
     save_run_dic(n, run_dic, path_out)
 if __name__ == "__main__":
