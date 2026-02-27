@@ -63,7 +63,7 @@ def make_plot(
     link_color=None,
     link_width=None,
     *,
-    scale_width=0.0008,
+    scale_width=0.002,
     min_width=3,
     vmin=0,
     vmax=100,
@@ -212,7 +212,11 @@ def color_key(n):
         "Öl":  n.carriers.color.get('oil', '#999999'),
         'Gesamtlast': "#F90909",
         'Gesamteinspeisung':  "#1DF909",
-        'Generatoreinspeisung': "#E68610EE"
+        'Generatoreinspeisung': "#E68610EE",
+        'varianz': "#E68610EE",
+        'max_price':"#28A3CFEC",
+        'min_price':"#2B7389FF",
+        'divergenz_price':"#E62D10ED",
     }
     return energy_colors
 # ========= Time-Plot (N-Achsen) =========
@@ -284,6 +288,11 @@ def get_gen_data(n, path_out):
     # gen_list.to_csv(path_out / f'Generatoren_{n.meta['run']['prefix']}.csv', index = True)
     # gen_carrier_list.to_csv(path_out / f'Generatortechnologien_{n.meta['run']['prefix']}.csv', index = True)
     return (gen_list, gen_carrier_list)
+# ========= CO2-Emission =========
+def calculate_co2_emission(n, gen_list):
+    primär_energy_2045 = gen_list.energy_2045_MWh / gen_list.efficiency
+    primär_energy_2045_car = primär_energy_2045.groupby(gen_list.carrier).sum()
+    return (primär_energy_2045_car.loc[n.carriers.co2_emissions > 0] * ((n.carriers.loc[n.carriers.co2_emissions > 0]).co2_emissions)).sum()
 # ========= Meritorder =========
 def merit_order(n, gen_list, path_out):
     # Sortieren für Meritorder
@@ -395,49 +404,30 @@ def data_for_time_plot(n):
             .join((carrier_time.T.sum().T).rename('Generatoreinspeisung'))
             )
     return data_pos_load, data_neg_load
+def get_line_power(n):
+        if n.lines_t.q0.empty == True: # Prüfung, ob Blindleistung mit Eingerichtet wurde
+            S = n.lines_t.p0.abs() # |p0| wenn Q≈0 -- abs() -- betrag der Wirkleistung
+        else:
+            S = (n.lines_t.p0 ** 2 + n.lines_t.q0 ** 2) ** 0.5
+        return S
 # ========= AC-Daten =========
-def get_ac_data(n):
-    if n.lines_t.q0.empty == True: # Prüfung, ob Blindleistung mit Eingerichtet wurde
-        S = n.lines_t.p0.abs() # |p0| wenn Q≈0 -- abs() -- betrag der Wirkleistung
-    else:
-        S = (n.lines_t.p0 ** 2 + n.lines_t.q0 ** 2) ** 0.5
-
-    loading_max = ((S.max() # Maximalwert!
-        .sort_index() #sort_index() im Nenner & im Zähler! -- richtige Reihenfolge
-          / (n.lines.s_nom_opt * n.lines.s_max_pu).sort_index() # .s_max_pu -- Zulässiger Anteil von s_nom_opt
-           ).fillna(0.0))
-    
-    loading_mean = ((
-        S.mean() # Mittelwert!!
-        .sort_index() # sort_index() im Nenner & im Zähler! -- richtige Reihenfolge
-          / 
-          (n.lines.s_nom_opt * n.lines.s_max_pu).sort_index() # .s_max_pu -- Zulässiger Anteil von s_nom_opt
-           ).fillna(0.0))
-
+def get_ac_data(n): #Leistungsberechnung als externe Funktion?
     list_lines = (n.lines.bus0.to_frame('bus0')
-              .join(n.lines[["bus1", "s_nom", "s_nom_opt", "capital_cost", "length"]])
-            #   .join(loading_max.rename('max_loading'))
-              .join(loading_mean.rename('mean_loading'))
+              .join(n.lines[["bus1", "s_nom", "s_nom_opt", 's_max_pu', "capital_cost", "length"]])
               .join((n.lines.s_nom_opt - n.lines.s_nom).rename('expansion_mw'))
-              .join((n.lines.overnight_cost * (n.lines.s_nom_opt - n.lines.s_nom)).rename('expansion_cost_EUR'))
+              .join((n.lines.capital_cost * (n.lines.s_nom_opt - n.lines.s_nom)).rename('expansion_cost_EUR'))
               .join((n.lines_t.loss.sum()).rename('loss_mwh'))
         )
-    # list_lines=list_lines.join(((list_lines.expansion_cost_EUR.sort_values(ascending=False) / list_lines.expansion_cost_EUR.sum()) * 100).rename('pc_expensions_cost')) # pc-Kosten des Ausbaus
     return list_lines
 # ========= DC-Daten =========
 def get_dc_data(n):
-    loading_max = n.links_t.p1.abs().sort_index().max() / (n.links.p_nom_opt * n.links.p_max_pu).sort_index()
-    loading_mean = n.links_t.p1.abs().sort_index().mean() / (n.links.p_nom_opt * n.links.p_max_pu).sort_index()
     list_links = (
             n.links.bus0.to_frame('bus0')
-            .join(n.links[["bus1", "carrier", "p_nom" ,"p_nom_opt","capital_cost"]])
-            # .join(loading_max.rename('max_loading'))
-            .join(loading_mean.rename('mean_loading'))
+            .join(n.links[["bus1", "carrier", "p_nom" ,"p_nom_opt",'p_max_pu', "capital_cost"]])
             .join(((n.links['p_nom_opt'] - n.links['p_nom'])).rename('expansion_mw'))
+            .join((n.links.capital_cost * (n.links['p_nom_opt'] - n.links['p_nom'])).rename('expansion_cost_EUR'))
     )
-    list_links = list_links.join((list_links.capital_cost.sort_values(ascending=False) * list_links.expansion_mw.sort_values(ascending=False)).rename('expansion_cost_EUR')) # Kosten des Ausbaus
     list_dc = list_links.loc[list_links['carrier'] == 'DC']
-    # list_dc = list_dc.join(((list_dc.expansion_cost_EUR.sort_values(ascending=False) / list_dc.expansion_cost_EUR.sum()) * 100).rename('pc_expensions_cost')) # pc-Kosten des Ausbaus (Nur DC-Leitungen)
     return list_dc
 # ========= Leitungs-Filter Basisnetz und NEP (AC & DC) =========
 def filter_connections(network_connection_raw, nep_connection_raw):
@@ -455,6 +445,23 @@ def make_real_expansion_data(nep_connections_in_network, type):
         nep_connections_in_network['expansion_cost_EUR'] = nep_connections_in_network.p_nom_opt * nep_connections_in_network.capital_cost
         nep_connections_in_network['p_nom'] = 0
     return nep_connections_in_network
+# ========= Daten für Plot vorbereiten =========      
+def prepare_data_for_nep_plot(ac_basenetwork,dc_basenetwork, ac_transmission_projects_nep, dc_transmission_projects_nep):
+    # Im Basisnetz nur Solverausbau
+    ac_basenetwork_copy = ac_basenetwork.copy()
+    ac_basenetwork_copy['expansion_mw'] = 0 
+    dc_basenetwork_copy = dc_basenetwork.copy()
+    dc_basenetwork_copy['expansion_mw'] = 0
+    # Eigentlich Null, aber für relative Darstellung muss eine Mindestleistung installiert sein.
+    ac_transmission_projects_nep_copy = ac_transmission_projects_nep.copy()
+    ac_transmission_projects_nep_copy['s_nom'] = 1
+    dc_transmission_projects_nep_copy = dc_transmission_projects_nep.copy()
+    dc_transmission_projects_nep_copy['p_nom'] = 1
+    # Listen für Plot zusammenführen
+    ac_data_for_nep_plot = two_to_one(ac_basenetwork_copy, ac_transmission_projects_nep_copy)
+    dc_data_for_nep_plot = two_to_one(dc_basenetwork_copy, dc_transmission_projects_nep_copy)
+    
+    return ac_data_for_nep_plot, dc_data_for_nep_plot
 # ========= Basisnetz & NEP-Projekte zusammenführen =========
 def two_to_one(list_1, list_2):
     if (list_1.index.intersection(list_2.index)).empty:
@@ -495,6 +502,16 @@ def multiple_to_run_dic(run_dic, component, list): # component: Generator, AC-Le
         to_run_dic(run_dic, 'Ausgebaute Leistung [MW]', 'DC-Leitungen (NEP)', list.expansion_mw.sum()) #expansion_mw.sum())
         to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'DC-Leitungen (NEP)', 'loss = |p0| * (1-η), efficiency = η = 1 <-> loss = 0')
         to_run_dic(run_dic, 'Anzahl [N]', 'DC-Leitungen (NEP)', len(list.index))
+# ========= Netzwerkkennzahlen ins Dic mit aufnehmen =========       
+def get_bus_data(n):
+    list = (
+        ((n.buses_t.marginal_price.T.loc[n.buses.carrier == 'AC'].T).T.var()).resample('W').max().to_frame('varianz')
+        .join((n.buses_t.marginal_price.T.max()).resample('W').max().rename('max_price'))
+        .join((n.buses_t.marginal_price.T.min()).resample('W').min().rename('min_price'))
+        )
+    list = list.join((list.max_price - list.min_price).resample('W').max().rename('divergenz_price'))
+
+    return list
 # ============================================== MAIN ==============================================
 def main():
     # ===== PFAD =====
@@ -516,14 +533,14 @@ def main():
     data_cake = gen_carrier_list.groupby(carrier_key()).sum().energy_2045_MWh
     make_cake_dia(n, data_cake, path_out, 'Energieerzeugung')
     multiple_to_run_dic(run_dic, 'Generator', gen_list)
+    co2_2045 = calculate_co2_emission(n, gen_list)
+    to_run_dic(run_dic, 'CO2-Ausstoß [t-CO2 / Periode (2045)]', 'Generator', co2_2045)
     # ===== Lasten =====
     to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'Last', (n.loads_t.p.sum().sum()*-1))
     # ===== Diagram zur Wahl des Zeitausschnitts =====
     data_pos_load, data_neg_load = data_for_time_plot(n) #Spezieller Plot, um Zeitpunkt des Netzengpasses zu bestimmen.
     time_plot_n_axses(n, data_pos_load.resample('D').mean(), path_out, file_title='Jahresüberblick', time_period='2045') # 2045
-    # time_plot_n_axses(n, data_pos_load.loc['2013-12-04':'2013-12-06'], path_out, file_title='Einspeisung_Wind_Last_2045_2', time_period='04-12-2045 bis 06-12-2045')
     time_plot_n_axses(n, data_pos_load.loc['2013-12-05 09:00:00':'2013-12-05 13:00:00'], path_out, file_title='Ausschnitt Jahreshöchstleistung', time_period='05-12-2045') # 2045
-    # time_plot_1_axes(n, data_neg_load.loc['2013-12-05 09:00:00':'2013-12-05 13:00:00'], path_out, file_title='Einspeisung_Wind_Last_2045_4')
     # ===== AC-Leitungen =====
     ac_lines_raw = get_ac_data(n)
     ac_nep_lines=get_csv(r'C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\data\transmission_projects\nep\new_lines.csv')
@@ -541,67 +558,48 @@ def main():
     multiple_to_run_dic(run_dic, 'DC-Leitungen (NEP)', dc_transmission_projects_nep)
     dc_links = two_to_one(dc_basenetwork, dc_transmission_projects_nep) # Übersicht zum Speichern
     # ===== Plots =====
-    # make_plot(
-    #     n,
-    #     title,
-    #     path_out=None,
-    #     pc_title=None,
-    #     line_color=None,
-    #     line_width=None,
-    #     link_color=None,
-    #     link_width=None,
-    #     *,
-    #     scale_width=0.0008,
-    #     min_width=1,
-    #     cmap=plt.cm.RdYlGn_r,
-    #     norm=None,
-    #     show_colorbar=True,
-    #     line_style="-",          
-    #     link_style="-",          
-    #     line_capstyle="round",  
-    #     link_capstyle="round",   
-    # )
     make_plot(n, 'Erster Überblick', path_out=path_out)
+    # Normalbetrieb --> ca. Mittelwert übers Jahr / zulässige installierte Leistung
+    S = get_line_power(n)
+    loading_mean_ac = S.mean() / (ac_lines.s_nom_opt * ac_lines.s_max_pu)
+    loading_mean_dc = (n.links_t.p1.abs().mean() / (dc_links.p_nom_opt * dc_links.p_max_pu)).loc[dc_links.index]
     make_plot(n, 'Normalbetrieb (Mittelwert 2045)', path_out=path_out,
-            pc_title='Farbe: Auslastung [%], Breite: Installierte Leistung',  # (100 %: Zulässig installierte Leistung)
-            line_color=ac_lines.mean_loading, 
-            line_width=ac_lines.s_nom_opt, 
-            link_color=dc_links.mean_loading, 
-            link_width=dc_links.p_nom_opt
+            pc_title='Farbe: Auslastung [%] (Basis: zul. installierte Leistung), Breite: installierte Leistung',  # (100 %: Zulässig installierte Leistung)
+            line_color=loading_mean_ac, 
+            link_color=loading_mean_dc,
             )
+    # Ausbau durch Solver --> Expansion der Rohdaten
     make_plot(n, 'Ausbau durch Solver', path_out=path_out,
             pc_title='Farbe: Ausbau [%] (Basis: ursprünglich installierte Leistung) ', 
             line_color= (ac_lines_raw.expansion_mw / ac_lines_raw.s_nom),
             link_color= (dc_links_raw.expansion_mw / dc_links_raw.p_nom)
             )
-    
-    ac_basenetwork_copy = ac_basenetwork.copy()
-    ac_basenetwork_copy['expansion_mw'] = 0
-
-    ac_transmission_projects_nep_copy = ac_transmission_projects_nep.copy()
-    ac_transmission_projects_nep['s_nom'] = 1
-
-    dc_basenetwork_copy = dc_basenetwork.copy()
-    dc_basenetwork_copy['expansion_mw'] = 0
-
-    dc_transmission_projects_nep_copy = dc_transmission_projects_nep.copy()
-    dc_transmission_projects_nep_copy['p_nom'] = 1
-    ac_nep_plot = two_to_one(ac_basenetwork_copy, ac_transmission_projects_nep_copy)
-    dc_nep_plot = two_to_one(dc_basenetwork_copy, dc_transmission_projects_nep_copy)
-    make_plot(n, 'Ausbau-NEP', path_out=path_out,
-          line_color=ac_nep_plot.expansion_mw / ac_nep_plot.s_nom,
-          link_color=dc_nep_plot.expansion_mw / dc_nep_plot.p_nom,
+    # Ausbau durch NEP --> Basisnetzwerk Expansion = 0 & NEP-Projekte s_nom & p_nom verwenden (installierte Leistung druch NEP)
+    ac_data_for_nep_plot, dc_data_for_nep_plot = prepare_data_for_nep_plot(ac_basenetwork,dc_basenetwork, ac_transmission_projects_nep, dc_transmission_projects_nep)
+    make_plot(n, 'Ausbau-NEP (rot) & Basisnetz (grün)', path_out=path_out, show_colorbar=False,
+          line_color=ac_data_for_nep_plot.expansion_mw / ac_data_for_nep_plot.s_nom,
+          link_color=dc_data_for_nep_plot.expansion_mw / dc_data_for_nep_plot.p_nom,
           pc_title='Farbe: Ausbau durch NEP-Projekte [%] (Basis: ursprünglich installierte Leistung), '
           )
-    make_plot(n, 'Gesamtausbau (Solver & NEP)', path_out=path_out,
+    # Gesamtausbau Solver und NEP --> 
+    make_plot(n, 'Gesamtausbau (Solver & NEP) & installierte Leistung', path_out=path_out,
           line_color=ac_lines.expansion_mw/ac_lines.s_nom,
-          line_width=ac_lines.expansion_cost_EUR/(ac_lines.expansion_cost_EUR.sum()+dc_links.expansion_cost_EUR.sum()),
+          line_width=ac_lines.s_nom_opt,
           link_color=dc_links.expansion_mw/dc_links.p_nom,
-          link_width=dc_links.expansion_cost_EUR/(ac_lines.expansion_cost_EUR.sum()+dc_links.expansion_cost_EUR.sum()),
-          scale_width=60,
-          pc_title='Farbe: Ausbau [%] (Basis: ursprünglich installierte Leistung), \nBreite: Investition [%] (Basis: GEsamtinvestition)'
+          link_width=dc_links.p_nom_opt,
+          pc_title='Farbe: Ausbau [%] (Basis: ursprünglich installierte Leistung), \nBreite: installierte Leistung'
           )
-
+    # Auslastung im Netzengpass
+    ac_eng_pass_data = n.lines_t.p1.abs().loc['2013-12-05 10:00:00'] / (n.lines.s_nom_opt * n.lines.s_max_pu)
+    dc_eng_pass_data = n.links_t.p1.abs().loc['2013-12-05 10:00:00'] / (n.links.p_nom_opt * n.links.p_max_pu)
+    make_plot(n, 'Netzengpass_05-12-2045_10_00_Uhr', path_out=path_out,
+            line_color=ac_eng_pass_data,
+            link_color=dc_eng_pass_data
+            )
+    # ===== Preisanalyse (Engpassidentifikation) =====
+    bus_list = get_bus_data(n)
+    time_plot_n_axses(n, bus_list, path_out, 'Preisübersicht [€ pro MW]', time_period="2045")
+    
 
 
 
