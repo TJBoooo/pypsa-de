@@ -11,6 +11,8 @@ import matplotlib.colors as mcolors
 plt.style.use('bmh')
 import cartopy.crs as ccrs
 import matplotlib.ticker as mtick
+# =========================== Pakete für Tabellenplots ===========================
+import textwrap
 # =========================== Funktionen ===========================
 # =========================== Netzwerk Laden ===========================
 def read_network(path_in):
@@ -41,10 +43,10 @@ def get_metadata(n, path, path_in):
     rows = [
             {"metric": "run_prefix", "value": prefix},
             {"metric": "run_name", "value": name},
-            {"metric": "network_file", "value": str(path_in)},
+            # {"metric": "network_file", "value": str(path_in)},
             {"metric": "pypsa_version_loaded_from_file", "value": n.meta['version']},
             {"metric": "snapshots_count", "value": len(n.snapshots)},
-            {"metric": "Auflösung", "value": auflösung},
+            {"metric": "resolution", "value": auflösung},
             {"metric": "snapshots_start", "value": start},
             {"metric": "snapshots_end", "value": end},
             {"metric": "objective", "value": objective},
@@ -52,7 +54,34 @@ def get_metadata(n, path, path_in):
             {"metric": "planning_horizons", "value": n.meta['scenario']['planning_horizons'][0]},
         ]
     overview = pd.DataFrame(rows)  # Array in Dataframe überführen
-    overview.to_csv(path / f'Metadaten_{prefix}.csv', index = False)
+    meta_data_to_plot(n, overview, path, title=f'Metadaten_{prefix}')
+    overview.to_excel(path / f'Metadaten_{n.meta['run']['prefix']}.xlsx', index = False)
+    overview.to_latex(path / f'Metadaten_{n.meta['run']['prefix']}.tex', index = False)
+    overview.to_csv(path / f'Metadaten_{n.meta['run']['prefix']}.csv', index = False)
+    
+def meta_data_to_plot(n, df, path_out, title=None, index=False):
+    df_show = df.copy()
+
+    fig, ax = plt.subplots(figsize=(15, 5))
+    ax.axis("off")
+
+    table = ax.table(
+        cellText=df_show.values,
+        colLabels=df_show.columns.tolist(),
+        rowLabels=df_show.index.tolist() if index else None,
+        cellLoc="center",
+        colLoc="center",
+        loc="center",
+        # colWidths=[0.5, 0.5]
+    )
+
+    table.auto_set_font_size(False)
+    table.set_fontsize(20)
+    table.scale(0.9, 1.8) #Breite, Höhe
+
+    path_out = Path(path_out)
+    fig.savefig(path_out / f'{title}.svg', bbox_inches="tight", pad_inches=0.01)
+    plt.close(fig)
 # =========================== Allgemeiner Plot (ChatGPT) ===========================
 def make_plot(
     n,
@@ -164,7 +193,40 @@ def network_components(n, path_out):
             df = getattr(n, attr)
             if isinstance(df, pd.DataFrame):
                 rows.append({"Komponenten": name, "N": len(df)})
-    pd.DataFrame(rows).to_csv(path_out / f'Meta_Komponenten_{n.meta['run']['prefix']}.csv', index = False)
+    df = pd.DataFrame(rows)
+    plot_network_component(df, path_out, title=f'Meta_Komponenten_{n.meta['run']['prefix']}', index=False)
+    df.to_excel(path_out / f'Meta_Komponenten_{n.meta['run']['prefix']}.xlsx', index = False)
+    df.to_latex(path_out / f'Meta_Komponenten_{n.meta['run']['prefix']}.tex', index = False)
+    df.to_csv(path_out / f'Meta_Komponenten_{n.meta['run']['prefix']}.csv', index = False)
+
+def plot_network_component(df, path_out, title=None, index=False):
+    df_show = df.copy()
+
+    fig, ax = plt.subplots(figsize=(8, 7))
+    ax.axis("off")
+
+    table = ax.table(
+        cellText=df_show.values,
+        colLabels=df_show.columns.tolist(),
+        rowLabels=df_show.index.tolist() if index else None,
+        cellLoc="center",
+        colLoc="center",
+        loc="center",
+        colWidths=[0.7, 0.3]  # 35% links, 65% rechts
+    )
+
+    table.auto_set_font_size(False)
+    table.set_fontsize(20)
+    table.scale(0.9, 1.7)
+
+    # if title:
+    #     ax.text(0.0, 1.7, title, transform=ax.transAxes,
+    #             ha='center', va='center',
+    #             fontsize=12, fontweight='bold')
+
+    path_out = Path(path_out)
+    fig.savefig(path_out / f'{title}.svg', bbox_inches="tight", pad_inches=0.01)
+    plt.close(fig)
 # ========= Hinzufügen Diconary ========= 
 def to_run_dic(dic, category, name, value):
     dic.setdefault(category, {})
@@ -176,7 +238,34 @@ def to_run_dic(dic, category, name, value):
 # ========= Speichern Diconary =========
 def save_run_dic(n, dic, path_out):
     df = pd.DataFrame(dic)
+    dic_table_plot(n, df, path_out, title=f'Meta_Diconary_{n.meta['run']['prefix']}', index=True)
+    df.to_excel(path_out / f'Meta_Diconary_{n.meta['run']['prefix']}.xlsx', index = True)
+    df.to_latex(path_out / f'Meta_Diconary_{n.meta['run']['prefix']}.tex', index = True)
     df.to_csv(path_out / f'Meta_Diconary_{n.meta['run']['prefix']}.csv', index = True)
+
+def dic_table_plot(n, df, path_out, title=None, index=False):
+    df_show = pd.DataFrame(df.copy())
+
+    fig, ax = plt.subplots(figsize=(35, 5))
+    ax.axis("off")
+
+    table = ax.table(
+        cellText=df_show.values,
+        colLabels=df_show.columns.tolist(),
+        rowLabels=df_show.index.tolist() if index else None,
+        cellLoc="center",
+        colLoc="center",
+        loc="center",
+        colWidths=[1/7, 1/6, 1/5, 1/14, 1/5, 1/6, 1/8]
+    )
+
+    table.auto_set_font_size(False)
+    table.set_fontsize(20)
+    table.scale(0.9, 6.5)
+  
+    path_out = Path(path_out)
+    fig.savefig(path_out / f'{title}.svg', bbox_inches="tight", pad_inches=0.01)
+    plt.close(fig)
 # ========= Technologieart nach Energieart sortieren =========
 def carrier_key():
     carrier_map = pd.Series({ # Serie mit Energiearten
@@ -499,13 +588,13 @@ def multiple_to_run_dic(run_dic, component, list): # component: Generator, AC-Le
         # DC-Leitungen die im Base-Netz waren (base_network)
         to_run_dic(run_dic, 'Investitionskosten [€]', 'DC-Leitungen (Basisnetzwerk)', list.expansion_cost_EUR.sum())
         to_run_dic(run_dic, 'Ausgebaute Leistung [MW]', 'DC-Leitungen (Basisnetzwerk)', list.expansion_mw.sum())
-        to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'DC-Leitungen (Basisnetzwerk)', 'loss = |p0| * (1-η), efficiency = η = 1 <-> loss = 0') #\text{loss} = |p0| \cdot (1-\eta)
+        to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'DC-Leitungen (Basisnetzwerk)', '|p0| * (1-η), η = 1 <-> loss = 0') #\text{loss} = |p0| \cdot (1-\eta)
         to_run_dic(run_dic, 'Anzahl [N]', 'DC-Leitungen (Basisnetzwerk)', len(list.index))
     elif component == 'DC-Leitungen (NEP)':
         # DC-Leitungen, die durch NEP hinzugefügt wurden (add_transmission_projects_and_dir & simplify_network)
         to_run_dic(run_dic, 'Investitionskosten [€]', 'DC-Leitungen (NEP)', list.expansion_cost_EUR.sum())
         to_run_dic(run_dic, 'Ausgebaute Leistung [MW]', 'DC-Leitungen (NEP)', list.expansion_mw.sum()) #expansion_mw.sum())
-        to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'DC-Leitungen (NEP)', 'loss = |p0| * (1-η), efficiency = η = 1 <-> loss = 0')
+        to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'DC-Leitungen (NEP)', '|p0| * (1-η), η = 1 <-> loss = 0')
         to_run_dic(run_dic, 'Anzahl [N]', 'DC-Leitungen (NEP)', len(list.index))
 # ========= Netzwerkkennzahlen ins Dic mit aufnehmen =========       
 def get_bus_data(n):
@@ -637,6 +726,11 @@ def statistic_plot(n, title, data_serie, path_out):
     )
 
     plt.close(fig)
+# ========= Interactive Karte =========
+def get_explore_map(n, path_out):
+    map = n.explore()
+    path_out = path_out / f'Interaktive_Karte_{n.meta['run']['prefix']}.html'
+    map.to_html(str(path_out))
 # ============================================== MAIN ==============================================
 def main():
     # ===== PFAD =====
@@ -775,6 +869,8 @@ def main():
     to_run_dic(run_dic, 'Anzahl [N]', 'DC (insgesamt)', total)
     # ===== Diconary für Energy speichern =====
     save_run_dic(n, run_dic, path_out)
+    # ===== Diconary für Energy speichern =====
+    get_explore_map(n, path_out)
 if __name__ == "__main__":
     main()
     print('\nFinsih')
