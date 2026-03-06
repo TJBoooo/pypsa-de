@@ -810,14 +810,12 @@ def main():
           )
     # ===== Preisanalyse (Engpassidentifikation) =====
     bus_list = get_bus_data(n)
-    bottleneck_hours = (bus_list.divergenz_price > 0).sum()
-    to_run_dic(run_dic, 'Volllast- / Engpassstunden', 'Netz', bottleneck_hours)
     bus_list_week = (bus_list.varianz.resample('W').max().to_frame('varianz')
                  .join(bus_list.max_price.resample('W').max())
                  .join(bus_list.min_price.resample('W').min())
                  .join(bus_list.divergenz_price).resample('W').max()
                  )
-    time_plot_n_axses(n, bus_list_week, path_out, 'marginal_price [€ pro MW]', time_period=f"2045 \nEngpassstunden: {bottleneck_hours} [h]", y_lable='[€/MW]')
+    time_plot_n_axses(n, bus_list_week, path_out, 'marginal_price [€ pro MW]', time_period=f"2045", y_lable='[€/MW]')
     # Auslastung im Netzengpass
     S = get_line_power(n)
     ac_eng_pass_data = S.loc['2013-12-05 10:00:00'] / (n.lines.s_nom_opt * n.lines.s_max_pu) 
