@@ -606,61 +606,61 @@ def get_bus_data(n):
     list = list.join((list.max_price - list.min_price).rename('divergenz_price'))
 
     return list
-# ========= Engpassrente (Chat GPT) ========= 
-def congestion_rent(n, use_abs=False):
-    """
-    Engpassrente ohne Snapshotgewichtung (da 1h je Snapshot).
-    - Lines: n.lines_t.p0
-    - Links: n.links_t.p0
-    - Preise: n.buses_t.marginal_price
-    Returns: dict mit total, ac_total, dc_total und optional je Branch.
-    """
-    price = n.buses_t.marginal_price  # index=snapshots, columns=buses
+# # ========= Engpassrente (Chat GPT) ========= 
+# def congestion_rent(n, use_abs=False):
+#     """
+#     Engpassrente ohne Snapshotgewichtung (da 1h je Snapshot).
+#     - Lines: n.lines_t.p0
+#     - Links: n.links_t.p0
+#     - Preise: n.buses_t.marginal_price
+#     Returns: dict mit total, ac_total, dc_total und optional je Branch.
+#     """
+#     price = n.buses_t.marginal_price  # index=snapshots, columns=buses
 
-    out = {}
+#     out = {}
 
-    # ---------- AC Lines ----------
-    if len(n.lines) > 0:
-        p0 = price.loc[:, n.lines.bus0.values].copy()
-        p1 = price.loc[:, n.lines.bus1.values].copy()
-        p0.columns = n.lines.index
-        p1.columns = n.lines.index
+#     # ---------- AC Lines ----------
+#     if len(n.lines) > 0:
+#         p0 = price.loc[:, n.lines.bus0.values].copy()
+#         p1 = price.loc[:, n.lines.bus1.values].copy()
+#         p0.columns = n.lines.index
+#         p1.columns = n.lines.index
 
-        dP_lines = p1 - p0                              # €/MWh
-        f_lines  = n.lines_t.p0                         # MW (bus0 -> bus1)
+#         dP_lines = p1 - p0                              # €/MWh
+#         f_lines  = n.lines_t.p0                         # MW (bus0 -> bus1)
 
-        rent_lines_t = dP_lines * f_lines               # €/h (bei 1h => € pro Snapshot)
-        if use_abs:
-            rent_lines_t = dP_lines.abs() * f_lines.abs()
+#         rent_lines_t = dP_lines * f_lines               # €/h (bei 1h => € pro Snapshot)
+#         if use_abs:
+#             rent_lines_t = dP_lines.abs() * f_lines.abs()
 
-        out["ac_total_EUR"] = float(rent_lines_t.sum().sum())
-        out["ac_by_line_EUR"] = rent_lines_t.sum(axis=0)  # Sum über Zeit, je Leitung
-    else:
-        out["ac_total_EUR"] = 0.0
-        out["ac_by_line_EUR"] = pd.Series(dtype=float)
+#         out["ac_total_EUR"] = float(rent_lines_t.sum().sum())
+#         out["ac_by_line_EUR"] = rent_lines_t.sum(axis=0)  # Sum über Zeit, je Leitung
+#     else:
+#         out["ac_total_EUR"] = 0.0
+#         out["ac_by_line_EUR"] = pd.Series(dtype=float)
 
-    # ---------- DC Links ----------
-    if len(n.links) > 0:
-        p0 = price.loc[:, n.links.bus0.values].copy()
-        p1 = price.loc[:, n.links.bus1.values].copy()
-        p0.columns = n.links.index
-        p1.columns = n.links.index
+#     # ---------- DC Links ----------
+#     if len(n.links) > 0:
+#         p0 = price.loc[:, n.links.bus0.values].copy()
+#         p1 = price.loc[:, n.links.bus1.values].copy()
+#         p0.columns = n.links.index
+#         p1.columns = n.links.index
 
-        dP_links = p1 - p0                              # €/MWh
-        f_links  = n.links_t.p0                         # MW (bus0 -> bus1)
+#         dP_links = p1 - p0                              # €/MWh
+#         f_links  = n.links_t.p0                         # MW (bus0 -> bus1)
 
-        rent_links_t = dP_links * f_links
-        if use_abs:
-            rent_links_t = dP_links.abs() * f_links.abs()
+#         rent_links_t = dP_links * f_links
+#         if use_abs:
+#             rent_links_t = dP_links.abs() * f_links.abs()
 
-        out["dc_total_EUR"] = float(rent_links_t.sum().sum())
-        out["dc_by_link_EUR"] = rent_links_t.sum(axis=0)
-    else:
-        out["dc_total_EUR"] = 0.0
-        out["dc_by_link_EUR"] = pd.Series(dtype=float)
+#         out["dc_total_EUR"] = float(rent_links_t.sum().sum())
+#         out["dc_by_link_EUR"] = rent_links_t.sum(axis=0)
+#     else:
+#         out["dc_total_EUR"] = 0.0
+#         out["dc_by_link_EUR"] = pd.Series(dtype=float)
 
-    out["total_EUR"] = out["ac_total_EUR"] + out["dc_total_EUR"]
-    return out
+#     out["total_EUR"] = out["ac_total_EUR"] + out["dc_total_EUR"]
+#     return out
 # ========= Auslastungsstatistic =========
 def statistic_plot(n, title, data_serie, path_out):
 
@@ -813,22 +813,22 @@ def main():
     bus_list_week = (bus_list.varianz.resample('W').max().to_frame('varianz')
                  .join(bus_list.max_price.resample('W').max())
                  .join(bus_list.min_price.resample('W').min())
-                 .join(bus_list.divergenz_price).resample('W').max()
+                #  .join(bus_list.divergenz_price).resample('W').max()
                  )
-    time_plot_n_axses(n, bus_list_week, path_out, 'marginal_price [€ pro MW]', time_period=f"2045", y_lable='[€/MW]')
-    # Auslastung im Netzengpass
+    time_plot_n_axses(n, bus_list_week, path_out, 'marginal_price', time_period=f"2045", y_lable='[€/MW]')
+    # ===== Auslastung im Netzengpass =====
     S = get_line_power(n)
     ac_eng_pass_data = S.loc['2013-12-05 10:00:00'] / (n.lines.s_nom_opt * n.lines.s_max_pu) 
     dc_eng_pass_data = n.links_t.p1.abs().loc['2013-12-05 10:00:00'] / (n.links.p_nom_opt * n.links.p_max_pu)
     make_plot(n, 'Netzengpass_05-12-2045_10_00_Uhr', path_out=path_out,
             line_color=ac_eng_pass_data,
             link_color=dc_eng_pass_data,
-            pc_title='Farbe: AUsbau [%] (Basis: zul. installierte Leistung)'
+            pc_title='Farbe: Ausbau [%] (Basis: zul. installierte Leistung)'
             )
-    shortage_pension = congestion_rent(n, use_abs=False)
-    to_run_dic(run_dic, 'Engpassrente [€]', 'AC (insgesamt)', shortage_pension["ac_total_EUR"])
-    to_run_dic(run_dic, 'Engpassrente [€]', 'DC (insgesamt)', shortage_pension["dc_total_EUR"])
-    to_run_dic(run_dic, 'Engpassrente [€]', 'Netz', shortage_pension["total_EUR"])
+    # shortage_pension = congestion_rent(n, use_abs=False)
+    # to_run_dic(run_dic, 'Engpassrente [€]', 'AC (insgesamt)', shortage_pension["ac_total_EUR"])
+    # to_run_dic(run_dic, 'Engpassrente [€]', 'DC (insgesamt)', shortage_pension["dc_total_EUR"])
+    # to_run_dic(run_dic, 'Engpassrente [€]', 'Netz', shortage_pension["total_EUR"])
     # Kreisdiagramm NEtzengpass
     data_cake = (n.generators_t.p.loc['2013-12-05 10:00:00'].groupby(n.generators.carrier).sum()).groupby(carrier_key()).sum() # Weil Snapshot 1h kein Umrechnen der Energiemenge
     make_cake_dia(n, data_cake, path_out, 'Energiererzuegung Netzengpass', time_period='2013-12-05 10:00 Uhr (Auflösung: 1h)')
