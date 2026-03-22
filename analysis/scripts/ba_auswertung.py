@@ -54,34 +54,18 @@ def get_metadata(n, path, path_in):
             {"metric": "planning_horizons", "value": n.meta['scenario']['planning_horizons'][0]},
         ]
     overview = pd.DataFrame(rows)  # Array in Dataframe überführen
-    meta_data_to_plot(n, overview, path, title=f'Metadaten_{prefix}')
-    overview.to_excel(path / f'Metadaten_{n.meta['run']['prefix']}.xlsx', index = False)
     overview.to_latex(path / f'Metadaten_{n.meta['run']['prefix']}.tex', index = False)
     overview.to_csv(path / f'Metadaten_{n.meta['run']['prefix']}.csv', index = False)
-    
-def meta_data_to_plot(n, df, path_out, title=None, index=False):
-    df_show = df.copy()
-
-    fig, ax = plt.subplots(figsize=(15, 5))
-    ax.axis("off")
-
-    table = ax.table(
-        cellText=df_show.values,
-        colLabels=df_show.columns.tolist(),
-        rowLabels=df_show.index.tolist() if index else None,
-        cellLoc="center",
-        colLoc="center",
-        loc="center",
-        # colWidths=[0.5, 0.5]
-    )
-
-    table.auto_set_font_size(False)
-    table.set_fontsize(20)
-    table.scale(0.9, 1.8) #Breite, Höhe
-
-    path_out = Path(path_out)
-    fig.savefig(path_out / f'{title}.svg', bbox_inches="tight", pad_inches=0.01)
-    plt.close(fig)
+# =========================== Nachträgliche Szenarien änderung ===========================
+def szenarien_name(name):
+    plot_name_map = {
+        "1_BA_Referenzoptimierung": "Referenzszenario",
+        "2_BA_2037_DC_W_O": "Szenario 2",
+        "3_BA_2037_DC_N_S": "Szenario 3",
+        "4_BA_2037_AC_N_O_S_W": "Szenario 4",
+    }
+    new_name = plot_name_map.get(name, name)  # Fallback: alter Name bleibt erhalten
+    return new_name
 # =========================== Allgemeiner Plot (ChatGPT) ===========================
 def make_plot(
     n,
@@ -174,8 +158,10 @@ def make_plot(
         cbar.set_label(f"{pc_title}", fontsize=20)
         cbar.ax.tick_params(labelsize=18)
 
+    name = szenarien_name(n.meta['run']['prefix'])
+
     ax.set_title(
-        f"{title} | {n.meta['run']['prefix']}",
+        f"{title} | {name}",
         fontsize=18,
         fontweight="bold"
     )
@@ -183,6 +169,7 @@ def make_plot(
     ax.axis("off")
 
     fig.savefig(path_out/f'{title}_{n.meta['run']['prefix']}.svg', bbox_inches="tight")
+    fig.savefig(path_out/f'{title}_{n.meta['run']['prefix']}.pdf', bbox_inches="tight")
     plt.close(fig)
 # ========= Erzeugen, der Netzwerkkomponenten =========
 def network_components(n, path_out):
@@ -194,39 +181,8 @@ def network_components(n, path_out):
             if isinstance(df, pd.DataFrame):
                 rows.append({"Komponenten": name, "N": len(df)})
     df = pd.DataFrame(rows)
-    plot_network_component(df, path_out, title=f'Meta_Komponenten_{n.meta['run']['prefix']}', index=False)
-    df.to_excel(path_out / f'Meta_Komponenten_{n.meta['run']['prefix']}.xlsx', index = False)
     df.to_latex(path_out / f'Meta_Komponenten_{n.meta['run']['prefix']}.tex', index = False)
     df.to_csv(path_out / f'Meta_Komponenten_{n.meta['run']['prefix']}.csv', index = False)
-
-def plot_network_component(df, path_out, title=None, index=False):
-    df_show = df.copy()
-
-    fig, ax = plt.subplots(figsize=(8, 7))
-    ax.axis("off")
-
-    table = ax.table(
-        cellText=df_show.values,
-        colLabels=df_show.columns.tolist(),
-        rowLabels=df_show.index.tolist() if index else None,
-        cellLoc="center",
-        colLoc="center",
-        loc="center",
-        colWidths=[0.7, 0.3]  # 35% links, 65% rechts
-    )
-
-    table.auto_set_font_size(False)
-    table.set_fontsize(20)
-    table.scale(0.9, 1.7)
-
-    # if title:
-    #     ax.text(0.0, 1.7, title, transform=ax.transAxes,
-    #             ha='center', va='center',
-    #             fontsize=12, fontweight='bold')
-
-    path_out = Path(path_out)
-    fig.savefig(path_out / f'{title}.svg', bbox_inches="tight", pad_inches=0.01)
-    plt.close(fig)
 # ========= Hinzufügen Diconary ========= 
 def to_run_dic(dic, category, name, value):
     dic.setdefault(category, {})
@@ -238,34 +194,45 @@ def to_run_dic(dic, category, name, value):
 # ========= Speichern Diconary =========
 def save_run_dic(n, dic, path_out):
     df = pd.DataFrame(dic)
-    dic_table_plot(n, df, path_out, title=f'Meta_Diconary_{n.meta['run']['prefix']}', index=True)
-    df.to_excel(path_out / f'Meta_Diconary_{n.meta['run']['prefix']}.xlsx', index = True)
-    df.to_latex(path_out / f'Meta_Diconary_{n.meta['run']['prefix']}.tex', index = True)
-    df.to_csv(path_out / f'Meta_Diconary_{n.meta['run']['prefix']}.csv', index = True)
 
-def dic_table_plot(n, df, path_out, title=None, index=False):
-    df_show = pd.DataFrame(df.copy())
+    df = df.rename(columns={
+        'Investitionskosten [€]': r'Investitionskosten [\euro]',
+        'Volllaststunden / Einheit [h/1]': r'Volllaststunden [h/Einheit]'
+        })
+    df = df.fillna("-")
+    df.loc["DC-Leitungen (Basis)", "Einspeisung / Verluste [MWh]"] = r"$|p_0| \cdot (1-\eta)$, $\eta = 1 \Leftrightarrow \text{loss} = 0$"
+    df.loc["DC-Leitungen (NEP)", "Einspeisung / Verluste [MWh]"] = r"$|p_0| \cdot (1-\eta)$, $\eta = 1 \Leftrightarrow \text{loss} = 0$"
+    df.loc["DC (insgesamt)", "Einspeisung / Verluste [MWh]"] = r"$|p_0| \cdot (1-\eta)$, $\eta = 1 \Leftrightarrow \text{loss} = 0$"
 
-    fig, ax = plt.subplots(figsize=(35, 5))
-    ax.axis("off")
+    df = df.applymap(lambda x: f"{x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                     if isinstance(x, (int, float)) else x)
 
-    table = ax.table(
-        cellText=df_show.values,
-        colLabels=df_show.columns.tolist(),
-        rowLabels=df_show.index.tolist() if index else None,
-        cellLoc="center",
-        colLoc="center",
-        loc="center",
-        colWidths=[1/7, 1/6, 1/5, 1/14, 1/5, 1/6, 1/8]
-    )
+    rows = []
 
-    table.auto_set_font_size(False)
-    table.set_fontsize(20)
-    table.scale(0.9, 6.5)
-  
-    path_out = Path(path_out)
-    fig.savefig(path_out / f'{title}.svg', bbox_inches="tight", pad_inches=0.01)
-    plt.close(fig)
+    header = " & ".join([""] + list(df.columns)) + r" \\"
+    rows.append(r"\toprule")
+    rows.append(header)
+    rows.append(r"\midrule")
+
+    for idx, row in df.iterrows():
+        row_str = " & ".join([str(idx)] + [str(v) for v in row.values]) + r" \\"
+        rows.append(row_str)
+
+    rows.append(r"\bottomrule")
+
+    latex_full = "\n".join([
+        r"\begin{tabularx}{\textwidth}{p{4.0cm} p{3cm} p{2.5cm} p{5.0cm} p{2.0cm} p{2.5cm} p{3.0cm}}",
+        *rows,
+        r"\end{tabularx}",
+    ])
+
+    tex_path = path_out / f"Meta_Diconary_{n.meta['run']['prefix']}.tex"
+    csv_path = path_out / f"Meta_Diconary_{n.meta['run']['prefix']}.csv"
+
+    with open(tex_path, "w", encoding="utf-8") as f:
+        f.write(latex_full)
+
+    df.to_csv(csv_path, index=True)
 # ========= Technologieart nach Energieart sortieren =========
 def carrier_key():
     carrier_map = pd.Series({ # Serie mit Energiearten
@@ -317,10 +284,13 @@ def time_plot_n_axses(n, data_plot, path_out, file_title, time_period, y_lable='
     fig, axes = plt.subplots(
         nrows=n_rows,
         ncols=1,
-        figsize=(18, 10),
+        figsize=(18, 25),
         sharex=True)
 
-    fig.suptitle(f"{n.meta['run']['prefix']}\nZeitverlauf: {time_period}", fontsize=22)
+
+    name = szenarien_name(n.meta['run']['prefix'])
+
+    fig.suptitle(f"{name}\n{file_title}\nZeitverlauf: {time_period}", fontsize=22)
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
     for i in range(n_rows):
@@ -329,6 +299,7 @@ def time_plot_n_axses(n, data_plot, path_out, file_title, time_period, y_lable='
         axes[i].set_title(f"{data_plot.columns[i]}")
 
     fig.savefig(path_out / f'{file_title}_{n.meta['run']['prefix']}.svg', bbox_inches="tight")
+    fig.savefig(path_out / f'{file_title}_{n.meta['run']['prefix']}.pdf', bbox_inches="tight")
     plt.close(fig)
 # ========= Time-Plot (1-Achse) =========
 def time_plot_1_axes(n, data_plot, path_out, file_title, time_period):
@@ -336,8 +307,11 @@ def time_plot_1_axes(n, data_plot, path_out, file_title, time_period):
     # Farbmap holen (dict: name -> hex)
     colors = [color_key(n).get(col, '#999999') for col in data_plot.columns]
     linewidth = 0.8
-    fig, ax = plt.subplots(figsize=(18, 6))
-    fig.suptitle(f"{n.meta['run']['prefix']}\nZeitverlauf: {time_period}", fontsize=22)
+    fig, ax = plt.subplots(figsize=(18, 25))
+
+    name = szenarien_name(n.meta['run']['prefix'])
+
+    fig.suptitle(f"{name}\n{file_title}\nZeitverlauf: {time_period}", fontsize=22)
     data_plot.plot(ax=ax, color=colors, linewidth=linewidth)
 
     ax.set_ylabel("MW")
@@ -352,6 +326,7 @@ def time_plot_1_axes(n, data_plot, path_out, file_title, time_period):
         )
 
     fig.savefig(path_out / f'{file_title}_{n.meta['run']['prefix']}.svg', bbox_inches="tight")
+    fig.savefig(path_out / f'{file_title}_{n.meta['run']['prefix']}.pdf', bbox_inches="tight")
     plt.close(fig)
 # ========= Generatordaten =========
 def get_gen_data(n, path_out):
@@ -414,7 +389,10 @@ def merit_order(n, gen_list, path_out):
 
     ax.set_xlabel("Kummulierte Kapazität (GW)")
     ax.set_ylabel("Grenzkosten (€/MWh)")
-    ax.set_title(f"Meritorder {n.meta['run']['prefix']}")
+
+    name = szenarien_name(n.meta['run']['prefix'])
+
+    ax.set_title(f"Meritorder {name}")
 
     # Maximalwert der kumulierten Leistung in GW
     x_max = df_merit["p_nom_opt_cum"].iloc[-1] / 1000.0
@@ -451,6 +429,7 @@ def merit_order(n, gen_list, path_out):
     plt.tight_layout()
 
     fig.savefig(path_out / f'Meritorder_{n.meta['run']['prefix']}.svg', bbox_inches="tight")
+    fig.savefig(path_out / f'Meritorder_{n.meta['run']['prefix']}.pdf', bbox_inches="tight")
     plt.close(fig)
 # ========= %-EE-Jahresenergie (Erzeugt) =========
 def make_cake_dia(n, data, path_out, title, time_period='2045'): #Wind in off und on unterteilen!
@@ -477,10 +456,13 @@ def make_cake_dia(n, data, path_out, title, time_period='2045'): #Wind in off un
     x, y = autotexts[i].get_position()
     autotexts[i].set_position((x * 1.2, y * 1.2))
 
-    plt.title(f"{title} {time_period}\n{n.meta['run']['prefix']}\nGesamterzeugung: {data.sum() / 1e6:.1f} [TWh]")
+    name = szenarien_name(n.meta['run']['prefix'])
+
+    plt.title(f"{title}\n{time_period}\n{name}\nGesamterzeugung: {data.sum() / 1e6:.1f} [TWh]")
     plt.ylabel("")
     
     fig.savefig(path_out / f'{title}_{n.meta['run']['prefix']}.svg', bbox_inches="tight")
+    fig.savefig(path_out / f'{title}_{n.meta['run']['prefix']}.pdf', bbox_inches="tight")
     plt.close(fig)
 # ========= Plotdaten für Zeitaussschnitt auswahl =========
 def data_for_time_plot(n):
@@ -572,24 +554,24 @@ def multiple_to_run_dic(run_dic, component, list): # component: Generator, AC-Le
         to_run_dic(run_dic, 'Ausgebaute Leistung [MW]', 'Generator', list.expansion_mw.sum())
         to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'Generator', (list.energy_2045_MWh.sum()))
         to_run_dic(run_dic, 'Anzahl [N]', 'Generator', len(list.index))
-    elif component == 'AC-Leitungen (Basisnetzwerk)':
+    elif component == 'AC-Leitungen (Basis)':
         # AC-Leitungen die im Base-Netz waren (base_network)
-        to_run_dic(run_dic, 'Investitionskosten [€]', 'AC-Leitungen (Basisnetzwerk)', list.expansion_cost_EUR.sum())
-        to_run_dic(run_dic, 'Ausgebaute Leistung [MW]', 'AC-Leitungen (Basisnetzwerk)', list.expansion_mw.sum())
-        to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'AC-Leitungen (Basisnetzwerk)', (list.loss_mwh.sum()*-1))
-        to_run_dic(run_dic, 'Anzahl [N]', 'AC-Leitungen (Basisnetzwerk)', len(list.index))
+        to_run_dic(run_dic, 'Investitionskosten [€]', 'AC-Leitungen (Basis)', list.expansion_cost_EUR.sum())
+        to_run_dic(run_dic, 'Ausgebaute Leistung [MW]', 'AC-Leitungen (Basis)', list.expansion_mw.sum())
+        to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'AC-Leitungen (Basis)', (list.loss_mwh.sum()*-1))
+        to_run_dic(run_dic, 'Anzahl [N]', 'AC-Leitungen (Basis)', len(list.index))
     elif component == 'AC-Leitungen (NEP)':
          # AC-Leitungen, die durch NEP hinzugefügt wurden (add_transmission_projects_and_dir & simplify_network)
         to_run_dic(run_dic, 'Investitionskosten [€]', 'AC-Leitungen (NEP)', list.expansion_cost_EUR.sum())
         to_run_dic(run_dic, 'Ausgebaute Leistung [MW]', 'AC-Leitungen (NEP)', list.expansion_mw.sum()) #expansion_mw.sum())
         to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'AC-Leitungen (NEP)', (list.loss_mwh.sum()*-1))
         to_run_dic(run_dic, 'Anzahl [N]', 'AC-Leitungen (NEP)', len(list.index))
-    elif component == 'DC-Leitungen (Basisnetzwerk)':
+    elif component == 'DC-Leitungen (Basis)':
         # DC-Leitungen die im Base-Netz waren (base_network)
-        to_run_dic(run_dic, 'Investitionskosten [€]', 'DC-Leitungen (Basisnetzwerk)', list.expansion_cost_EUR.sum())
-        to_run_dic(run_dic, 'Ausgebaute Leistung [MW]', 'DC-Leitungen (Basisnetzwerk)', list.expansion_mw.sum())
-        to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'DC-Leitungen (Basisnetzwerk)', '|p0| * (1-η), η = 1 <-> loss = 0') #\text{loss} = |p0| \cdot (1-\eta)
-        to_run_dic(run_dic, 'Anzahl [N]', 'DC-Leitungen (Basisnetzwerk)', len(list.index))
+        to_run_dic(run_dic, 'Investitionskosten [€]', 'DC-Leitungen (Basis)', list.expansion_cost_EUR.sum())
+        to_run_dic(run_dic, 'Ausgebaute Leistung [MW]', 'DC-Leitungen (Basis)', list.expansion_mw.sum())
+        to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'DC-Leitungen (Basis)', '|p0| * (1-η), η = 1 <-> loss = 0') #\text{loss} = |p0| \cdot (1-\eta)
+        to_run_dic(run_dic, 'Anzahl [N]', 'DC-Leitungen (Basis)', len(list.index))
     elif component == 'DC-Leitungen (NEP)':
         # DC-Leitungen, die durch NEP hinzugefügt wurden (add_transmission_projects_and_dir & simplify_network)
         to_run_dic(run_dic, 'Investitionskosten [€]', 'DC-Leitungen (NEP)', list.expansion_cost_EUR.sum())
@@ -606,61 +588,6 @@ def get_bus_data(n):
     list = list.join((list.max_price - list.min_price).rename('divergenz_price'))
 
     return list
-# # ========= Engpassrente (Chat GPT) ========= 
-# def congestion_rent(n, use_abs=False):
-#     """
-#     Engpassrente ohne Snapshotgewichtung (da 1h je Snapshot).
-#     - Lines: n.lines_t.p0
-#     - Links: n.links_t.p0
-#     - Preise: n.buses_t.marginal_price
-#     Returns: dict mit total, ac_total, dc_total und optional je Branch.
-#     """
-#     price = n.buses_t.marginal_price  # index=snapshots, columns=buses
-
-#     out = {}
-
-#     # ---------- AC Lines ----------
-#     if len(n.lines) > 0:
-#         p0 = price.loc[:, n.lines.bus0.values].copy()
-#         p1 = price.loc[:, n.lines.bus1.values].copy()
-#         p0.columns = n.lines.index
-#         p1.columns = n.lines.index
-
-#         dP_lines = p1 - p0                              # €/MWh
-#         f_lines  = n.lines_t.p0                         # MW (bus0 -> bus1)
-
-#         rent_lines_t = dP_lines * f_lines               # €/h (bei 1h => € pro Snapshot)
-#         if use_abs:
-#             rent_lines_t = dP_lines.abs() * f_lines.abs()
-
-#         out["ac_total_EUR"] = float(rent_lines_t.sum().sum())
-#         out["ac_by_line_EUR"] = rent_lines_t.sum(axis=0)  # Sum über Zeit, je Leitung
-#     else:
-#         out["ac_total_EUR"] = 0.0
-#         out["ac_by_line_EUR"] = pd.Series(dtype=float)
-
-#     # ---------- DC Links ----------
-#     if len(n.links) > 0:
-#         p0 = price.loc[:, n.links.bus0.values].copy()
-#         p1 = price.loc[:, n.links.bus1.values].copy()
-#         p0.columns = n.links.index
-#         p1.columns = n.links.index
-
-#         dP_links = p1 - p0                              # €/MWh
-#         f_links  = n.links_t.p0                         # MW (bus0 -> bus1)
-
-#         rent_links_t = dP_links * f_links
-#         if use_abs:
-#             rent_links_t = dP_links.abs() * f_links.abs()
-
-#         out["dc_total_EUR"] = float(rent_links_t.sum().sum())
-#         out["dc_by_link_EUR"] = rent_links_t.sum(axis=0)
-#     else:
-#         out["dc_total_EUR"] = 0.0
-#         out["dc_by_link_EUR"] = pd.Series(dtype=float)
-
-#     out["total_EUR"] = out["ac_total_EUR"] + out["dc_total_EUR"]
-#     return out
 # ========= Auslastungsstatistic =========
 def statistic_plot(n, title, data_serie, path_out):
 
@@ -700,7 +627,7 @@ def statistic_plot(n, title, data_serie, path_out):
     )
 
     ax.text(
-        0.98, 0.95, text,
+        0.9, 0.98, text,
         transform=ax.transAxes,
         verticalalignment='top',
         horizontalalignment='right',
@@ -713,18 +640,15 @@ def statistic_plot(n, title, data_serie, path_out):
 
     # Y-Achse in Prozent darstellen
     ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1))
-
-    ax.set_title(title)
-    ax.legend(loc='upper left')
+    name = szenarien_name(n.meta['run']['prefix'])
+    ax.set_title(f'{name} {title}')
+    ax.legend(loc='upper left', bbox_to_anchor=(0.55, 0.98))
     ax.grid(alpha=0.3)
 
     fig.tight_layout()
 
-    fig.savefig(
-        path_out / f"Statistik_{title}_{n.meta['run']['prefix']}.svg",
-        bbox_inches="tight"
-    )
-
+    fig.savefig(path_out / f"Statistik_{title}_{n.meta['run']['prefix']}.svg",bbox_inches="tight")
+    fig.savefig(path_out / f"Statistik_{title}_{n.meta['run']['prefix']}.pdf",bbox_inches="tight")
     plt.close(fig)
 # ========= Interactive Karte =========
 def get_explore_map(n, path_out):
@@ -753,7 +677,7 @@ def main():
     make_cake_dia(n, data_cake, path_out, 'Energieerzeugung')
     multiple_to_run_dic(run_dic, 'Generator', gen_list)
     co2_2045 = calculate_co2_emission(n, gen_list)
-    to_run_dic(run_dic, 'CO2-Ausstoß [t / Periode] (2045)', 'Generator', co2_2045)
+    to_run_dic(run_dic, 'CO2-Ausstoß [t / Periode]', 'Generator', co2_2045)
     # ===== Lasten =====
     to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'Last', (n.loads_t.p.sum().sum()*-1))
     # ===== Diagram zur Wahl des Zeitausschnitts =====
@@ -765,7 +689,7 @@ def main():
     ac_nep_lines=get_csv(r'C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\data\transmission_projects\nep\new_lines.csv')
     ac_basenetwork, ac_transmission_projects_nep = filter_connections(ac_lines_raw, ac_nep_lines) # Gibt die verbauten Connections im Netzwerk aufgeteilt nach Roh- & NEP-Netzwerk zurück
     ac_transmission_projects_nep = make_real_expansion_data(ac_transmission_projects_nep, 'AC') # Neurechnen des Ausbau und Kosten für NEP-Projekte
-    multiple_to_run_dic(run_dic, 'AC-Leitungen (Basisnetzwerk)', ac_basenetwork)
+    multiple_to_run_dic(run_dic, 'AC-Leitungen (Basis)', ac_basenetwork)
     multiple_to_run_dic(run_dic, 'AC-Leitungen (NEP)', ac_transmission_projects_nep)
     ac_lines = two_to_one(ac_basenetwork, ac_transmission_projects_nep) # Übersicht zum Speichern
     # ===== DC-Leitungen =====
@@ -773,7 +697,7 @@ def main():
     links_nep=get_csv(r'C:\Users\peterson_stud\Desktop\BA_PyPSA\pypsa-de\data\transmission_projects\nep\new_links.csv')
     dc_basenetwork, dc_transmission_projects_nep = filter_connections(dc_links_raw, links_nep)
     dc_transmission_projects_nep = make_real_expansion_data(dc_transmission_projects_nep, 'DC') # Neurechnen des Ausbau und Kosten für NEP-Projekte
-    multiple_to_run_dic(run_dic, 'DC-Leitungen (Basisnetzwerk)', dc_basenetwork)
+    multiple_to_run_dic(run_dic, 'DC-Leitungen (Basis)', dc_basenetwork)
     multiple_to_run_dic(run_dic, 'DC-Leitungen (NEP)', dc_transmission_projects_nep)
     dc_links = two_to_one(dc_basenetwork, dc_transmission_projects_nep) # Übersicht zum Speichern
     # ===== Plots =====
@@ -823,13 +747,9 @@ def main():
     make_plot(n, 'Netzengpass_05-12-2045_10_00_Uhr', path_out=path_out,
             line_color=ac_eng_pass_data,
             link_color=dc_eng_pass_data,
-            pc_title='Farbe: Ausbau [%] (Basis: zul. installierte Leistung)'
+            pc_title='Farbe: Auslastung [%] (Basis: zul. installierte Leistung)'
             )
-    # shortage_pension = congestion_rent(n, use_abs=False)
-    # to_run_dic(run_dic, 'Engpassrente [€]', 'AC (insgesamt)', shortage_pension["ac_total_EUR"])
-    # to_run_dic(run_dic, 'Engpassrente [€]', 'DC (insgesamt)', shortage_pension["dc_total_EUR"])
-    # to_run_dic(run_dic, 'Engpassrente [€]', 'Netz', shortage_pension["total_EUR"])
-    # Kreisdiagramm NEtzengpass
+    # Kreisdiagramm Netzengpass
     data_cake = (n.generators_t.p.loc['2013-12-05 10:00:00'].groupby(n.generators.carrier).sum()).groupby(carrier_key()).sum() # Weil Snapshot 1h kein Umrechnen der Energiemenge
     make_cake_dia(n, data_cake, path_out, 'Energiererzuegung Netzengpass', time_period='2013-12-05 10:00 Uhr (Auflösung: 1h)')
     # ===== Statistic =====
@@ -837,33 +757,41 @@ def main():
     statistic_plot(n, 'Normalbetrieb alle Verbindungen (Mittelwert 2045)', data, path_out)
     data = two_to_one(ac_eng_pass_data, dc_eng_pass_data.loc[dc_links.index])
     statistic_plot(n, 'Netzengpass_05-12-2045_10_00_Uhr', data, path_out)
-    # ===== Volllaststunden zum Dic =====
-    to_run_dic(run_dic, 'Volllast- / Engpassstunden', 'Generator', gen_list.full_load_hours_h.sum())
-    to_run_dic(run_dic, 'Volllast- / Engpassstunden', 'AC-Leitungen (Basisnetzwerk)', ((n.lines_t.p0.abs().sum()).loc[ac_basenetwork.index] / ac_basenetwork.s_nom_opt).sum())
-    to_run_dic(run_dic, 'Volllast- / Engpassstunden', 'AC-Leitungen (NEP)', ((n.lines_t.p0.abs().sum()).loc[ac_transmission_projects_nep.index] / ac_transmission_projects_nep.s_nom_opt).sum())
-    to_run_dic(run_dic, 'Volllast- / Engpassstunden', 'DC-Leitungen (Basisnetzwerk)', ((n.links_t.p0.abs().sum()).loc[dc_basenetwork.index] / dc_basenetwork.p_nom_opt).sum())
-    to_run_dic(run_dic, 'Volllast- / Engpassstunden', 'DC-Leitungen (NEP)', ((n.links_t.p0.abs().sum()).loc[dc_transmission_projects_nep.index] / dc_transmission_projects_nep.p_nom_opt).sum())
-    to_run_dic(run_dic, 'Volllast- / Engpassstunden', 'AC (insgesamt)', (((n.lines_t.p0.abs().sum()).loc[ac_basenetwork.index] / ac_basenetwork.s_nom_opt).sum()+((n.lines_t.p0.abs().sum()).loc[ac_transmission_projects_nep.index] / ac_transmission_projects_nep.s_nom_opt).sum()))
-    to_run_dic(run_dic, 'Volllast- / Engpassstunden', 'DC (insgesamt)', (((n.links_t.p0.abs().sum()).loc[dc_basenetwork.index] / dc_basenetwork.p_nom_opt).sum()+((n.links_t.p0.abs().sum()).loc[dc_transmission_projects_nep.index] / dc_transmission_projects_nep.p_nom_opt).sum()))     
+    # # ===== Volllaststunden zum Dic =====
+    # to_run_dic(run_dic, 'Volllaststunden [h]', 'Generator', (gen_list.full_load_hours_h.sum()))
+    # to_run_dic(run_dic, 'Volllaststunden [h]', 'AC-Leitungen (Basis)', (((n.lines_t.p0.abs().sum()).loc[ac_basenetwork.index] / ac_basenetwork.s_nom_opt).sum()))
+    # to_run_dic(run_dic, 'Volllaststunden [h]', 'AC-Leitungen (NEP)', (((n.lines_t.p0.abs().sum()).loc[ac_transmission_projects_nep.index] / ac_transmission_projects_nep.s_nom_opt).sum()))
+    # to_run_dic(run_dic, 'Volllaststunden [h]', 'DC-Leitungen (Basis)', (((n.links_t.p0.abs().sum()).loc[dc_basenetwork.index] / dc_basenetwork.p_nom_opt).sum()))
+    # to_run_dic(run_dic, 'Volllaststunden [h]', 'DC-Leitungen (NEP)', ((n.links_t.p0.abs().sum()).loc[dc_transmission_projects_nep.index] / dc_transmission_projects_nep.p_nom_opt).sum())
+    # to_run_dic(run_dic, 'Volllaststunden [h]', 'AC (insgesamt)', (((n.lines_t.p0.abs().sum()).loc[ac_basenetwork.index] / ac_basenetwork.s_nom_opt).sum()+((n.lines_t.p0.abs().sum()).loc[ac_transmission_projects_nep.index] / ac_transmission_projects_nep.s_nom_opt).sum()))
+    # to_run_dic(run_dic, 'Volllaststunden [h]', 'DC (insgesamt)', (((n.links_t.p0.abs().sum()).loc[dc_basenetwork.index] / dc_basenetwork.p_nom_opt).sum()+((n.links_t.p0.abs().sum()).loc[dc_transmission_projects_nep.index] / dc_transmission_projects_nep.p_nom_opt).sum()))    
+    # ===== Volllaststunden / Einheit [h/1] zum Dic =====
+    to_run_dic(run_dic, 'Volllaststunden / Einheit [h/1]', 'Generator', (gen_list.full_load_hours_h.sum() / len(gen_list.index)))
+    to_run_dic(run_dic, 'Volllaststunden / Einheit [h/1]', 'AC-Leitungen (Basis)', (((n.lines_t.p0.abs().sum()).loc[ac_basenetwork.index] / ac_basenetwork.s_nom_opt).sum()) / len(n.lines.loc[ac_basenetwork.index].index))
+    to_run_dic(run_dic, 'Volllaststunden / Einheit [h/1]', 'AC-Leitungen (NEP)', (((n.lines_t.p0.abs().sum()).loc[ac_transmission_projects_nep.index] / ac_transmission_projects_nep.s_nom_opt).sum()) / len(n.lines.loc[ac_transmission_projects_nep.index].index))
+    to_run_dic(run_dic, 'Volllaststunden / Einheit [h/1]', 'DC-Leitungen (Basis)', (((n.links_t.p0.abs().sum()).loc[dc_basenetwork.index] / dc_basenetwork.p_nom_opt).sum()) / len(n.links.loc[dc_basenetwork.index].index))
+    to_run_dic(run_dic, 'Volllaststunden / Einheit [h/1]', 'DC-Leitungen (NEP)', (((n.links_t.p0.abs().sum()).loc[dc_transmission_projects_nep.index] / dc_transmission_projects_nep.p_nom_opt).sum()) / len(n.links.loc[dc_transmission_projects_nep.index].index))
+    to_run_dic(run_dic, 'Volllaststunden / Einheit [h/1]', 'AC (insgesamt)', (((n.lines_t.p0.abs().sum()).loc[ac_basenetwork.index] / ac_basenetwork.s_nom_opt).sum()+((n.lines_t.p0.abs().sum()).loc[ac_transmission_projects_nep.index] / ac_transmission_projects_nep.s_nom_opt).sum()) / len(n.lines.index))
+    to_run_dic(run_dic, 'Volllaststunden / Einheit [h/1]', 'DC (insgesamt)', (((n.links_t.p0.abs().sum()).loc[dc_basenetwork.index] / dc_basenetwork.p_nom_opt).sum()+((n.links_t.p0.abs().sum()).loc[dc_transmission_projects_nep.index] / dc_transmission_projects_nep.p_nom_opt).sum()) / len(n.links.loc[n.links.carrier == 'DC']))
     # ===== Diconary vervollständigen =====
-    total = run_dic.get('Investitionskosten [€]', {}).get('AC-Leitungen (NEP)', 0) + run_dic.get('Investitionskosten [€]', {}).get('AC-Leitungen (Basisnetzwerk)', 0)
+    total = run_dic.get('Investitionskosten [€]', {}).get('AC-Leitungen (NEP)', 0) + run_dic.get('Investitionskosten [€]', {}).get('AC-Leitungen (Basis)', 0)
     to_run_dic(run_dic, 'Investitionskosten [€]', 'AC (insgesamt)', total)
-    total = run_dic.get('Investitionskosten [€]', {}).get('DC-Leitungen (NEP)', 0) + run_dic.get('Investitionskosten [€]', {}).get('DC-Leitungen (Basisnetzwerk)', 0)
+    total = run_dic.get('Investitionskosten [€]', {}).get('DC-Leitungen (NEP)', 0) + run_dic.get('Investitionskosten [€]', {}).get('DC-Leitungen (Basis)', 0)
     to_run_dic(run_dic, 'Investitionskosten [€]', 'DC (insgesamt)', total)
 
-    total = run_dic.get('Ausgebaute Leistung [MW]', {}).get('AC-Leitungen (NEP)', 0) + run_dic.get('Ausgebaute Leistung [MW]', {}).get('AC-Leitungen (Basisnetzwerk)', 0)
+    total = run_dic.get('Ausgebaute Leistung [MW]', {}).get('AC-Leitungen (NEP)', 0) + run_dic.get('Ausgebaute Leistung [MW]', {}).get('AC-Leitungen (Basis)', 0)
     to_run_dic(run_dic, 'Ausgebaute Leistung [MW]', 'AC (insgesamt)', total)
-    total = run_dic.get('Ausgebaute Leistung [MW]', {}).get('DC-Leitungen (NEP)', 0) + run_dic.get('Ausgebaute Leistung [MW]', {}).get('DC-Leitungen (Basisnetzwerk)', 0)
+    total = run_dic.get('Ausgebaute Leistung [MW]', {}).get('DC-Leitungen (NEP)', 0) + run_dic.get('Ausgebaute Leistung [MW]', {}).get('DC-Leitungen (Basis)', 0)
     to_run_dic(run_dic, 'Ausgebaute Leistung [MW]', 'DC (insgesamt)', total)
 
-    total = run_dic.get('Einspeisung / Verluste [MWh]', {}).get('AC-Leitungen (NEP)', 0) + run_dic.get('Einspeisung / Verluste [MWh]', {}).get('AC-Leitungen (Basisnetzwerk)', 0)
+    total = run_dic.get('Einspeisung / Verluste [MWh]', {}).get('AC-Leitungen (NEP)', 0) + run_dic.get('Einspeisung / Verluste [MWh]', {}).get('AC-Leitungen (Basis)', 0)
     to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'AC (insgesamt)', total)
     total = run_dic.get('Einspeisung / Verluste [MWh]', {}).get('DC-Leitungen (NEP)', 0)
     to_run_dic(run_dic, 'Einspeisung / Verluste [MWh]', 'DC (insgesamt)', total)
 
-    total = run_dic.get('Anzahl [N]', {}).get('AC-Leitungen (NEP)', 0) + run_dic.get('Anzahl [N]', {}).get('AC-Leitungen (Basisnetzwerk)', 0)
+    total = run_dic.get('Anzahl [N]', {}).get('AC-Leitungen (NEP)', 0) + run_dic.get('Anzahl [N]', {}).get('AC-Leitungen (Basis)', 0)
     to_run_dic(run_dic, 'Anzahl [N]', 'AC (insgesamt)', total)
-    total = run_dic.get('Anzahl [N]', {}).get('DC-Leitungen (NEP)', 0) + run_dic.get('Anzahl [N]', {}).get('DC-Leitungen (Basisnetzwerk)', 0)
+    total = run_dic.get('Anzahl [N]', {}).get('DC-Leitungen (NEP)', 0) + run_dic.get('Anzahl [N]', {}).get('DC-Leitungen (Basis)', 0)
     to_run_dic(run_dic, 'Anzahl [N]', 'DC (insgesamt)', total)
     # ===== Diconary für Energy speichern =====
     save_run_dic(n, run_dic, path_out)
